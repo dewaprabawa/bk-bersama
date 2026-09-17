@@ -37,12 +37,21 @@ function StoryDetailPage() {
   const [commentsList, setCommentsList] = useState<Comment[]>(story.comments)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  // Re-sync with loader data
+  // Re-sync with loader data safely without wiping out optimistic comments
   useEffect(() => {
     setLiked(initialLiked)
     setLikesCount(story.likes)
-    setCommentsList(story.comments)
-  }, [initialLiked, story.likes, story.comments])
+  }, [initialLiked, story.likes])
+
+  useEffect(() => {
+    setCommentsList((prev) => {
+      const serverIds = new Set(story.comments.map((c) => c.id))
+      const pendingComments = prev.filter(
+        (c) => c.id.startsWith('temp-') && !serverIds.has(c.id),
+      )
+      return [...story.comments, ...pendingComments]
+    })
+  }, [story.comments])
 
   // When activeUser loads on client, check if activeUser has liked this story
   useEffect(() => {
@@ -89,12 +98,12 @@ function StoryDetailPage() {
     if (!text || isSubmitting) return
 
     setIsSubmitting(true)
+    const tempId = `temp-${Date.now()}`
     try {
       const user = await getOrCreateUser()
       const authorName = user.name || 'Siswa'
 
       // Optimistic comment
-      const tempId = `temp-${Date.now()}`
       const optimisticComment: Comment = {
         id: tempId,
         author: authorName,
@@ -117,12 +126,18 @@ function StoryDetailPage() {
 
       // Replace optimistic comment with confirmed server comment
       setCommentsList((prev) =>
-        prev.map((c) => (c.id === tempId ? { ...c, id: res.id, author: res.author } : c)),
+        prev.map((c) =>
+          c.id === tempId
+            ? { ...c, id: res.id, author: res.author, authorId: res.authorId }
+            : c,
+        ),
       )
       await router.invalidate()
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to post comment:', err)
-      alert('Gagal mengirim komentar. Coba lagi sebentar ya.')
+      // Rollback optimistic comment on failure
+      setCommentsList((prev) => prev.filter((c) => c.id !== tempId))
+      alert(err?.message || 'Gagal mengirim komentar. Coba lagi sebentar ya.')
     } finally {
       setIsSubmitting(false)
     }
@@ -323,7 +338,13 @@ function StoryDetailPage() {
         </div>
 
         {/* Form Tulis Komentar */}
-        <div className="mt-4 rounded-2xl border border-[#e4d7bd] bg-paper-warm p-3 shadow-2xs">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            submitComment()
+          }}
+          className="mt-4 rounded-2xl border border-[#e4d7bd] bg-paper-warm p-3 shadow-2xs"
+        >
           <div className="mb-2 flex items-center justify-between text-[11px] text-ink-soft">
             <span className="flex items-center gap-1">
               <User className="h-3 w-3 text-forest" />
@@ -331,24 +352,27 @@ function StoryDetailPage() {
                 Komentar sebagai: <strong className="text-ink">{activeUser?.name || 'Siswa'}</strong>
               </span>
             </span>
+            {isSubmitting && (
+              <span className="text-[11px] font-semibold text-forest animate-pulse">
+                Mengirim...
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
             <input
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') submitComment()
-              }}
+              disabled={isSubmitting}
               placeholder={
                 isWatcher
                   ? 'Tulis bimbingan atau tanggapan konselor...'
                   : 'Tulis dukungan ramah untuk teman ini...'
               }
-              className="flex-1 rounded-xl border border-[#e4d7bd] bg-paper px-3.5 py-2.5 text-[13.5px] text-ink outline-none placeholder:text-ink-soft/50 focus:border-forest"
+              className="flex-1 rounded-xl border border-[#e4d7bd] bg-paper px-3.5 py-2.5 text-[13.5px] text-ink outline-none placeholder:text-ink-soft/50 focus:border-forest disabled:opacity-60"
             />
             <button
-              onClick={submitComment}
+              type="submit"
               disabled={isSubmitting || !draft.trim()}
               aria-label="Kirim komentar"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-forest text-paper-warm shadow-xs transition-transform active:scale-95 disabled:opacity-50"
@@ -356,7 +380,7 @@ function StoryDetailPage() {
               <Send className="h-4 w-4" strokeWidth={2.25} />
             </button>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   )

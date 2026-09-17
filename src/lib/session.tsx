@@ -40,17 +40,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // 1. Get current device's permanent single account
       let savedId: string | undefined = undefined
       try {
-        savedId =
+        const raw =
           localStorage.getItem('bk_device_account_id') ||
           localStorage.getItem('bk_active_user_id') ||
           undefined
+        if (raw && raw !== 'undefined' && raw !== 'null') {
+          savedId = raw
+        }
       } catch {}
 
       const res = await getOrCreateDeviceAccount({
         data: { deviceUserId: savedId },
       })
 
-      if (res.user) {
+      if (res?.user) {
         const sessionUser: SessionUser = {
           id: res.user.id,
           name: res.user.name,
@@ -94,19 +97,31 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     _name?: string,
     _role: 'siswa' | 'guru_bk' = 'siswa',
   ): Promise<SessionUser> => {
-    if (activeUser) return activeUser
+    if (activeUser && activeUser.id) return activeUser
 
     let savedId: string | undefined = undefined
     try {
-      savedId =
+      const raw =
         localStorage.getItem('bk_device_account_id') ||
         localStorage.getItem('bk_active_user_id') ||
         undefined
+      if (raw && raw !== 'undefined' && raw !== 'null') {
+        savedId = raw
+      }
     } catch {}
 
     const res = await getOrCreateDeviceAccount({
       data: { deviceUserId: savedId },
     })
+
+    if (!res?.user) {
+      return {
+        id: `user-${Date.now()}`,
+        name: 'Siswa',
+        grade: 'Siswa',
+        role: 'siswa',
+      }
+    }
 
     const sessionUser: SessionUser = {
       id: res.user.id,

@@ -323,21 +323,44 @@ export const toggleStoryLike = createServerFn({ method: 'POST' })
 
 export const createComment = createServerFn({ method: 'POST' })
   .inputValidator(
-    (data: { storyId: string; text: string; userId: string; userName?: string }) => data,
+    (data?: { storyId?: string; text?: string; userId?: string; userName?: string }) => data || {},
   )
   .handler(async ({ data }) => {
-    if (!data.userId || !data.userId.trim()) {
-      throw new Error('Silakan pilih akun pengguna terlebih dahulu.')
+    const payload = data || {}
+    const storyId = payload.storyId?.trim()
+    const text = payload.text?.trim()
+
+    if (!storyId) {
+      throw new Error('ID cerita tidak valid.')
     }
-    if (!data.text || !data.text.trim()) {
+    if (!text) {
       throw new Error('Isi komentar tidak boleh kosong.')
     }
 
-    const callerId = data.userId.trim()
-    const userList = await db.select().from(users).where(eq(users.id, callerId)).limit(1)
-    let authorName = userList[0]?.name || data.userName?.trim() || 'Siswa'
+    // Verify target story exists in database
+    const storyList = await db.select().from(stories).where(eq(stories.id, storyId)).limit(1)
+    if (storyList.length === 0) {
+      throw new Error('Cerita tidak ditemukan.')
+    }
 
-    if (userList.length === 0) {
+    let callerId = payload.userId?.trim()
+    let authorName = payload.userName?.trim() || 'Siswa'
+
+    if (callerId) {
+      const userList = await db.select().from(users).where(eq(users.id, callerId)).limit(1)
+      if (userList.length === 0) {
+        await db.insert(users).values({
+          id: callerId,
+          name: authorName,
+          grade: 'Siswa',
+          role: 'siswa',
+          joinedAt: new Date(),
+        })
+      } else {
+        authorName = userList[0].name
+      }
+    } else {
+      callerId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
       await db.insert(users).values({
         id: callerId,
         name: authorName,
@@ -350,10 +373,10 @@ export const createComment = createServerFn({ method: 'POST' })
     const commentId = `c-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
     const newComment = {
       id: commentId,
-      storyId: data.storyId,
+      storyId,
       authorId: callerId,
       authorName,
-      text: data.text.trim(),
+      text,
       createdAt: new Date(),
     }
     await db.insert(comments).values(newComment)
@@ -363,7 +386,7 @@ export const createComment = createServerFn({ method: 'POST' })
       author: authorName,
       authorId: callerId,
       timeAgo: 'Baru saja',
-      text: data.text.trim(),
+      text,
       canDelete: true,
     }
   })

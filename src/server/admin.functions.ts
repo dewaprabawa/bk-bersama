@@ -61,15 +61,19 @@ export const deleteMember = createServerFn({ method: 'POST' })
 
 export const getOrCreateDeviceAccount = createServerFn({ method: 'POST' })
   .inputValidator(
-    (data: { deviceUserId?: string; initialRole?: 'siswa' | 'guru_bk'; initialName?: string }) => data,
+    (data?: { deviceUserId?: string; initialRole?: 'siswa' | 'guru_bk'; initialName?: string }) =>
+      data || {},
   )
   .handler(async ({ data }) => {
-    // 1. If deviceUserId was provided, check if that user already exists in DB
-    if (data.deviceUserId && data.deviceUserId.trim()) {
+    const payload = data || {}
+    const requestedId = payload.deviceUserId?.trim()
+
+    // 1. If deviceUserId was provided and valid, check if that user already exists in DB
+    if (requestedId && requestedId !== 'undefined' && requestedId !== 'null') {
       const existing = await db
         .select()
         .from(users)
-        .where(eq(users.id, data.deviceUserId.trim()))
+        .where(eq(users.id, requestedId))
         .limit(1)
 
       if (existing.length > 0) {
@@ -79,8 +83,8 @@ export const getOrCreateDeviceAccount = createServerFn({ method: 'POST' })
 
     // 2. Fresh visitor: create a unique single account for this device
     const allUsers = await db.select({ id: users.id }).from(users).limit(1)
-    let role: string = data.initialRole || 'siswa'
-    let name = data.initialName?.trim() || `Siswa #${Math.floor(1000 + Math.random() * 9000)}`
+    let role: string = payload.initialRole || 'siswa'
+    let name = payload.initialName?.trim() || `Siswa #${Math.floor(1000 + Math.random() * 9000)}`
     let grade = 'Siswa'
 
     if (allUsers.length === 0) {
