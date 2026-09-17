@@ -1,10 +1,11 @@
 import { createFileRoute, notFound, useNavigate, useRouter } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
-import { Heart, Send, ShieldCheck, Trash2 } from 'lucide-react'
+import { Heart, Send, ShieldCheck, Trash2, MessageCircle, User } from 'lucide-react'
 
 import { AppTopBar } from '@/components/app-top-bar'
 import { TagChip } from '@/components/tag-chip'
 import { useSession } from '@/lib/session'
+import type { Comment } from '@/lib/fixtures'
 import {
   getStoryById,
   toggleStoryLike,
@@ -24,60 +25,106 @@ export const Route = createFileRoute('/_app/feed/$storyId')({
 })
 
 function StoryDetailPage() {
-  const { story, isLiked } = Route.useLoaderData()
+  const { story, isLiked: initialLiked } = Route.useLoaderData()
   const router = useRouter()
   const navigate = useNavigate()
-  const { activeUser, isWatcher } = useSession()
+  const { activeUser, isWatcher, getOrCreateUser } = useSession()
 
   const [draft, setDraft] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [liked, setLiked] = useState(isLiked)
+  const [liked, setLiked] = useState(initialLiked)
   const [likesCount, setLikesCount] = useState(story.likes)
+  const [commentsList, setCommentsList] = useState<Comment[]>(story.comments)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [customAuthorName, setCustomAuthorName] = useState('')
+  const [showNameEdit, setShowNameEdit] = useState(false)
 
+  // Re-sync with loader data
   useEffect(() => {
-    setLiked(isLiked)
+    setLiked(initialLiked)
     setLikesCount(story.likes)
-  }, [isLiked, story.likes])
+    setCommentsList(story.comments)
+  }, [initialLiked, story.likes, story.comments])
 
-  const canDeleteStory = isWatcher || (activeUser?.id ? story.authorId === activeUser.id : false) || story.mine
+  // When activeUser loads on client, check if activeUser has liked this story
+  useEffect(() => {
+    if (!activeUser?.id) return
+    getStoryById({ data: { id: story.id, userId: activeUser.id } }).then((res) => {
+      if (res.story) {
+        setLiked(res.isLiked)
+        setLikesCount(res.story.likes)
+      }
+    })
+  }, [activeUser?.id, story.id])
+
+  const canDeleteStory =
+    isWatcher || (activeUser?.id ? story.authorId === activeUser.id : false) || story.mine
 
   const handleLike = async () => {
-    if (!activeUser?.id) {
-      alert('Silakan pilih atau buat akun di menu Admin untuk menyukai cerita ini.')
-      return
-    }
     const prevLiked = liked
     const prevCount = likesCount
+
+    // Optimistic update
     setLiked(!prevLiked)
-    setLikesCount(prevLiked ? prevCount - 1 : prevCount + 1)
+    setLikesCount(prevLiked ? Math.max(0, prevCount - 1) : prevCount + 1)
+
     try {
+      const user = await getOrCreateUser()
       const res = await toggleStoryLike({
-        data: { storyId: story.id, userId: activeUser.id },
+        data: {
+          storyId: story.id,
+          userId: user.id,
+          userName: user.name,
+        },
       })
       setLiked(res.liked)
       setLikesCount(res.likesCount)
-      await router.invalidate()
-    } catch {
+    } catch (err) {
+      console.error('Like failed:', err)
       setLiked(prevLiked)
       setLikesCount(prevCount)
     }
   }
 
   const submitComment = async () => {
-    if (!activeUser?.id) {
-      alert('Silakan pilih atau buat akun di menu Admin untuk mengirim komentar.')
-      return
-    }
     const text = draft.trim()
     if (!text || isSubmitting) return
+
     setIsSubmitting(true)
     try {
-      await createComment({
-        data: { storyId: story.id, text, userId: activeUser.id },
-      })
+      const user = await getOrCreateUser(customAuthorName)
+      const authorName = customAuthorName.trim() || user.name
+
+      // Optimistic comment
+      const tempId = `temp-${Date.now()}`
+      const optimisticComment: Comment = {
+        id: tempId,
+        author: authorName,
+        authorId: user.id,
+        timeAgo: 'Baru saja',
+        text,
+        canDelete: true,
+      }
+      setCommentsList((prev) => [...prev, optimisticComment])
       setDraft('')
+
+      const res = await createComment({
+        data: {
+          storyId: story.id,
+          text,
+          userId: user.id,
+          userName: authorName,
+        },
+      })
+
+      // Replace optimistic comment with confirmed server comment
+      setCommentsList((prev) =>
+        prev.map((c) => (c.id === tempId ? { ...c, id: res.id, author: res.author } : c)),
+      )
       await router.invalidate()
+    } catch (err) {
+      console.error('Failed to post comment:', err)
+      alert('Gagal mengirim komentar. Coba lagi sebentar ya.')
     } finally {
       setIsSubmitting(false)
     }
@@ -98,8 +145,8 @@ function StoryDetailPage() {
         data: { storyId: story.id, userId: activeUser.id },
       })
       navigate({ to: '/feed' })
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Gagal menghapus cerita.')
+    } catch (err: any) {
+      alert(err?.message || 'Gagal menghapus cerita.')
       setIsDeleting(false)
     }
   }
@@ -113,13 +160,15 @@ function StoryDetailPage() {
     )
     if (!confirmed) return
 
+    setCommentsList((prev) => prev.filter((c) => c.id !== commentId))
     try {
       await deleteComment({
         data: { commentId, userId: activeUser.id },
       })
       await router.invalidate()
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Gagal menghapus komentar.')
+    } catch (err: any) {
+      alert(err?.message || 'Gagal menghapus komentar.')
+      await router.invalidate()
     }
   }
 
@@ -130,14 +179,14 @@ function StoryDetailPage() {
         data: { storyId: story.id, userId: activeUser.id },
       })
       await router.invalidate()
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Gagal mengubah status perlindungan.')
+    } catch (err: any) {
+      alert(err?.message || 'Gagal mengubah status perlindungan.')
     }
   }
 
   return (
-    <div>
-      <AppTopBar title="Cerita" back />
+    <div className="pb-12">
+      <AppTopBar title="Detail Cerita" back />
 
       {/* Anti-bullying Watcher banner */}
       <div className="mx-4 mt-3 rounded-xl border border-emerald-600/30 bg-emerald-50/80 p-3 text-emerald-900 shadow-2xs">
@@ -146,7 +195,7 @@ function StoryDetailPage() {
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-1">
               <p className="text-[12.5px] font-bold text-emerald-800">
-                {story.isProtected ? 'Dipantau Guru BK (Aman dari Perundungan)' : 'Pengawasan Dinonaktifkan'}
+                {story.isProtected ? 'Dipantau Guru BK (Aman dari Bullying)' : 'Pengawasan Dinonaktifkan'}
               </p>
               {isWatcher && (
                 <button
@@ -158,8 +207,7 @@ function StoryDetailPage() {
               )}
             </div>
             <p className="mt-0.5 text-[11.5px] leading-relaxed text-emerald-800/80">
-              Cerita ini diawasi oleh tim Bimbingan Konseling. Komentar bernada ejekan, intimidasi,
-              atau perundungan akan segera dihapus untuk menjaga ruang aman.
+              Cerita ini diawasi oleh tim Bimbingan Konseling. Komentar ejekan atau perundungan akan segera dihapus demi menjaga ruang aman.
             </p>
           </div>
         </div>
@@ -168,7 +216,7 @@ function StoryDetailPage() {
       <article className="px-4 py-4">
         <div className="flex items-center gap-2.5">
           <div
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white shadow-2xs"
             style={{ backgroundColor: `hsl(${story.avatarHue} 38% 42%)` }}
           >
             {story.avatarLetter}
@@ -182,7 +230,7 @@ function StoryDetailPage() {
           <TagChip tag={story.tag} />
         </div>
 
-        <h1 className="font-display mt-4 text-[22px] font-semibold leading-tight text-ink">
+        <h1 className="font-display mt-4 text-[22px] font-bold leading-tight text-ink">
           {story.title}
         </h1>
 
@@ -192,22 +240,28 @@ function StoryDetailPage() {
           ))}
         </div>
 
-        <div className="mt-5 flex items-center justify-between">
+        {/* Action Buttons: Like & Delete */}
+        <div className="mt-6 flex items-center justify-between border-y border-[#e4d7bd]/70 py-3">
           <button
             onClick={handleLike}
-            className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${
-              liked ? 'border-rose bg-rose/10 text-rose' : 'border-[#e4d7bd] text-ink-soft'
+            className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition-all active:scale-95 ${
+              liked
+                ? 'border border-rose/30 bg-rose/15 text-rose shadow-2xs'
+                : 'border border-[#e4d7bd] bg-paper-warm text-ink-soft hover:border-rose/30 hover:bg-rose/10 hover:text-rose'
             }`}
           >
-            <Heart className="h-4 w-4" strokeWidth={2.25} fill={liked ? 'currentColor' : 'none'} />
-            {likesCount} suka
+            <Heart
+              className={`h-4.5 w-4.5 transition-transform ${liked ? 'fill-rose text-rose scale-110' : ''}`}
+              strokeWidth={2.25}
+            />
+            <span>{likesCount} Suka</span>
           </button>
 
           {canDeleteStory && (
             <button
               onClick={handleDeleteStory}
               disabled={isDeleting}
-              className="flex items-center gap-1.5 rounded-full border border-rose/30 bg-rose/10 px-3.5 py-1.5 text-xs font-semibold text-rose transition-colors hover:bg-rose/20 disabled:opacity-60"
+              className="flex items-center gap-1.5 rounded-full border border-rose/30 bg-rose/10 px-3.5 py-2 text-xs font-bold text-rose transition hover:bg-rose/20 active:scale-95 disabled:opacity-60"
             >
               <Trash2 className="h-3.5 w-3.5" />
               <span>{isWatcher ? 'Hapus Cerita (Watcher)' : 'Hapus Cerita'}</span>
@@ -216,34 +270,46 @@ function StoryDetailPage() {
         </div>
       </article>
 
-      <div className="border-t border-[#e4d7bd] px-4 py-4">
-        <h2 className="font-display text-[15px] font-semibold text-ink">
-          Komentar ({story.comments.length})
-        </h2>
+      {/* Komentar Section */}
+      <div id="comments" className="px-4 py-3">
+        <div className="flex items-center gap-2">
+          <MessageCircle className="h-4.5 w-4.5 text-forest" />
+          <h2 className="font-display text-[16px] font-bold text-ink">
+            Komentar &amp; Dukungan ({commentsList.length})
+          </h2>
+        </div>
 
-        <div className="mt-3 space-y-3">
-          {story.comments.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-[#d8c7a3] bg-paper-warm/60 px-4 py-5 text-center text-[13px] text-ink-soft/80">
-              Belum ada komentar. Jadi yang pertama memberi dukungan ramah.
-            </p>
+        <div className="mt-3.5 space-y-3">
+          {commentsList.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-[#d8c7a3] bg-paper-warm/60 px-4 py-6 text-center text-xs text-ink-soft">
+              Belum ada komentar. Tuliskan tanggapan hangat atau dukungan pertamamu di bawah.
+            </div>
           ) : (
-            story.comments.map((comment) => {
+            commentsList.map((comment) => {
               const canDeleteThisComment =
                 isWatcher ||
                 (activeUser?.id ? comment.authorId === activeUser.id : false) ||
                 comment.canDelete
 
               return (
-                <div key={comment.id} className="rounded-xl bg-paper-warm px-3.5 py-3">
+                <div
+                  key={comment.id}
+                  className="rounded-2xl border border-[#e4d7bd]/70 bg-paper-warm p-3.5 shadow-2xs"
+                >
                   <div className="flex items-baseline justify-between gap-2">
-                    <p className="text-[13px] font-semibold text-ink">{comment.author}</p>
+                    <div className="flex items-center gap-1.5">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-forest/15 text-[10px] font-bold text-forest-dark">
+                        {comment.author.charAt(0).toUpperCase()}
+                      </span>
+                      <p className="text-[13px] font-bold text-ink">{comment.author}</p>
+                    </div>
                     <div className="flex items-center gap-2">
-                      <p className="shrink-0 text-[11px] text-ink-soft/60">{comment.timeAgo}</p>
+                      <p className="text-[11px] text-ink-soft/60">{comment.timeAgo}</p>
                       {canDeleteThisComment && (
                         <button
                           onClick={() => handleDeleteComment(comment.id)}
-                          title="Hapus komentar ini untuk mencegah perundungan"
-                          className="flex items-center gap-1 text-[11px] font-medium text-rose hover:underline"
+                          title="Hapus komentar ini demi mencegah perundungan"
+                          className="flex items-center gap-1 text-[11px] font-semibold text-rose hover:underline"
                         >
                           <Trash2 className="h-3 w-3" />
                           <span>Hapus</span>
@@ -251,35 +317,69 @@ function StoryDetailPage() {
                       )}
                     </div>
                   </div>
-                  <p className="mt-1 text-[13.5px] leading-relaxed text-ink-soft">{comment.text}</p>
+                  <p className="mt-2 text-[13.5px] leading-relaxed text-ink-soft">{comment.text}</p>
                 </div>
               )
             })
           )}
         </div>
 
-        <div className="mt-4 flex items-center gap-2">
-          <input
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') submitComment()
-            }}
-            placeholder={
-              isWatcher
-                ? 'Tulis tanggapan atau bimbingan konselor...'
-                : 'Tulis dukungan ramah untuk cerita ini...'
-            }
-            className="flex-1 rounded-full border border-[#e4d7bd] bg-paper-warm px-4 py-2.5 text-[13.5px] text-ink outline-none placeholder:text-ink-soft/50 focus:border-forest"
-          />
-          <button
-            onClick={submitComment}
-            disabled={isSubmitting}
-            aria-label="Kirim komentar"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-forest text-paper-warm transition-transform active:scale-95 disabled:opacity-60"
-          >
-            <Send className="h-4 w-4" strokeWidth={2.25} />
-          </button>
+        {/* Form Tulis Komentar */}
+        <div className="mt-4 rounded-2xl border border-[#e4d7bd] bg-paper-warm p-3 shadow-2xs">
+          <div className="mb-2 flex items-center justify-between text-[11px] text-ink-soft">
+            <span className="flex items-center gap-1">
+              <User className="h-3 w-3 text-forest" />
+              <span>
+                Nama Pengirim:{' '}
+                <strong className="text-ink">
+                  {customAuthorName || activeUser?.name || 'Siswa'}
+                </strong>
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowNameEdit((v) => !v)}
+              className="text-[11px] font-semibold text-forest underline hover:text-forest-dark"
+            >
+              {showNameEdit ? 'Tutup' : 'Ubah Nama'}
+            </button>
+          </div>
+
+          {showNameEdit && (
+            <div className="mb-2.5">
+              <input
+                type="text"
+                value={customAuthorName}
+                onChange={(e) => setCustomAuthorName(e.target.value)}
+                placeholder="Tulis nama komentarmu (misal: Rian, Anonim, atau Siswa Kelas XI)"
+                className="w-full rounded-xl border border-[#e4d7bd] bg-paper px-3 py-1.5 text-xs text-ink outline-none focus:border-forest"
+              />
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <input
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') submitComment()
+              }}
+              placeholder={
+                isWatcher
+                  ? 'Tulis bimbingan atau tanggapan konselor...'
+                  : 'Tulis dukungan ramah untuk teman ini...'
+              }
+              className="flex-1 rounded-xl border border-[#e4d7bd] bg-paper px-3.5 py-2.5 text-[13.5px] text-ink outline-none placeholder:text-ink-soft/50 focus:border-forest"
+            />
+            <button
+              onClick={submitComment}
+              disabled={isSubmitting || !draft.trim()}
+              aria-label="Kirim komentar"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-forest text-paper-warm shadow-xs transition-transform active:scale-95 disabled:opacity-50"
+            >
+              <Send className="h-4 w-4" strokeWidth={2.25} />
+            </button>
+          </div>
         </div>
       </div>
     </div>

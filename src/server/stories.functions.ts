@@ -65,8 +65,12 @@ export const getStories = createServerFn({ method: 'GET' })
     }
 
     const likesCountByStoryId = new Map<string, number>()
+    const userLikedStoryIds = new Set<string>()
     for (const l of allLikes) {
       likesCountByStoryId.set(l.storyId, (likesCountByStoryId.get(l.storyId) || 0) + 1)
+      if (currentUserId && l.userId === currentUserId) {
+        userLikedStoryIds.add(l.storyId)
+      }
     }
 
     return allStories.map((s) => ({
@@ -83,6 +87,7 @@ export const getStories = createServerFn({ method: 'GET' })
       content: s.content,
       tag: s.tag as Category,
       likes: likesCountByStoryId.get(s.id) || 0,
+      isLiked: userLikedStoryIds.has(s.id),
       mine: Boolean(currentUserId) && s.authorId === currentUserId,
       isProtected: s.isProtected,
       canDelete: isWatcher || (Boolean(currentUserId) && s.authorId === currentUserId),
@@ -274,13 +279,28 @@ export const toggleStoryProtection = createServerFn({ method: 'POST' })
   })
 
 export const toggleStoryLike = createServerFn({ method: 'POST' })
-  .inputValidator((data: { storyId: string; userId: string }) => data)
+  .inputValidator(
+    (data: { storyId: string; userId: string; userName?: string }) => data,
+  )
   .handler(async ({ data }) => {
     if (!data.userId || !data.userId.trim()) {
       throw new Error('Silakan pilih akun pengguna terlebih dahulu.')
     }
 
     const callerId = data.userId.trim()
+
+    // Ensure user exists in database so foreign key doesn't fail
+    const userList = await db.select().from(users).where(eq(users.id, callerId)).limit(1)
+    if (userList.length === 0) {
+      await db.insert(users).values({
+        id: callerId,
+        name: data.userName?.trim() || 'Siswa',
+        grade: 'Siswa',
+        role: 'siswa',
+        joinedAt: new Date(),
+      })
+    }
+
     const existing = await db
       .select()
       .from(likes)
@@ -290,7 +310,7 @@ export const toggleStoryLike = createServerFn({ method: 'POST' })
 
     if (userLike) {
       await db.delete(likes).where(eq(likes.id, userLike.id))
-      return { liked: false, likesCount: existing.length - 1 }
+      return { liked: false, likesCount: Math.max(0, existing.length - 1) }
     } else {
       await db.insert(likes).values({
         id: `like-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -302,25 +322,49 @@ export const toggleStoryLike = createServerFn({ method: 'POST' })
   })
 
 export const createComment = createServerFn({ method: 'POST' })
-  .inputValidator((data: { storyId: string; text: string; userId: string }) => data)
+  .inputValidator(
+    (data: { storyId: string; text: string; userId: string; userName?: string }) => data,
+  )
   .handler(async ({ data }) => {
     if (!data.userId || !data.userId.trim()) {
       throw new Error('Silakan pilih akun pengguna terlebih dahulu.')
     }
+    if (!data.text || !data.text.trim()) {
+      throw new Error('Isi komentar tidak boleh kosong.')
+    }
 
     const callerId = data.userId.trim()
     const userList = await db.select().from(users).where(eq(users.id, callerId)).limit(1)
-    const authorName = userList[0]?.name || 'Anonim'
+    let authorName = userList[0]?.name || data.userName?.trim() || 'Siswa'
 
-    const commentId = `c-${Date.now()}`
-    await db.insert(comments).values({
+    if (userList.length === 0) {
+      await db.insert(users).values({
+        id: callerId,
+        name: authorName,
+        grade: 'Siswa',
+        role: 'siswa',
+        joinedAt: new Date(),
+      })
+    }
+
+    const commentId = `c-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const newComment = {
       id: commentId,
       storyId: data.storyId,
       authorId: callerId,
       authorName,
       text: data.text.trim(),
       createdAt: new Date(),
-    })
+    }
+    await db.insert(comments).values(newComment)
 
-    return { id: commentId, author: authorName }
+    return {
+      id: commentId,
+      author: authorName,
+      authorId: callerId,
+      timeAgo: 'Baru saja',
+      text: data.text.trim(),
+      canDelete: true,
+    }
   })
+

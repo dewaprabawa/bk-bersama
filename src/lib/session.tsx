@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { getUsersList } from '@/server/admin.functions'
+import { getUsersList, createMember } from '@/server/admin.functions'
 
 export type UserRole = 'siswa' | 'guru_bk'
 
@@ -23,6 +23,7 @@ type SessionContextValue = {
   hasUsers: boolean
   switchUser: (id: string) => void
   refreshUsers: () => Promise<void>
+  getOrCreateUser: (name?: string, role?: 'siswa' | 'guru_bk') => Promise<SessionUser>
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null)
@@ -72,6 +73,46 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const getOrCreateUser = async (
+    name?: string,
+    role: 'siswa' | 'guru_bk' = 'siswa',
+  ): Promise<SessionUser> => {
+    if (activeUser) return activeUser
+    if (usersList.length > 0) {
+      setActiveUser(usersList[0])
+      try {
+        localStorage.setItem('bk_active_user_id', usersList[0].id)
+      } catch {}
+      return usersList[0]
+    }
+
+    const newUser = await createMember({
+      data: {
+        name: name?.trim() || 'Siswa',
+        role,
+        grade: role === 'guru_bk' ? 'Guru BK' : 'Siswa',
+        phone: '',
+        bio: '',
+      },
+    })
+
+    const sessionUser: SessionUser = {
+      id: newUser.id,
+      name: newUser.name,
+      grade: newUser.grade,
+      role: newUser.role,
+      phone: newUser.phone,
+      bio: newUser.bio,
+    }
+
+    setActiveUser(sessionUser)
+    setUsersList([sessionUser])
+    try {
+      localStorage.setItem('bk_active_user_id', sessionUser.id)
+    } catch {}
+    return sessionUser
+  }
+
   return (
     <SessionContext.Provider
       value={{
@@ -81,6 +122,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         hasUsers: usersList.length > 0,
         switchUser,
         refreshUsers: loadUsers,
+        getOrCreateUser,
       }}
     >
       {children}
@@ -98,6 +140,7 @@ export function useSession() {
       hasUsers: false,
       switchUser: () => {},
       refreshUsers: async () => {},
+      getOrCreateUser: async () => STUDENT_USER,
     }
   }
   return ctx

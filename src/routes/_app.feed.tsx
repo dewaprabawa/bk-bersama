@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Sparkles, ShieldCheck } from 'lucide-react'
 
 import { AppTopBar } from '@/components/app-top-bar'
@@ -17,9 +17,23 @@ export const Route = createFileRoute('/_app/feed')({
 type Tab = 'semua' | 'saya'
 
 function FeedPage() {
-  const { stories } = Route.useLoaderData()
+  const { stories: initialStories } = Route.useLoaderData()
   const { activeUser, hasUsers, isWatcher } = useSession()
+  const [stories, setStories] = useState(initialStories)
   const [tab, setTab] = useState<Tab>('semua')
+
+  useEffect(() => {
+    setStories(initialStories)
+  }, [initialStories])
+
+  // When activeUser loads, refresh stories with like statuses for this user
+  useEffect(() => {
+    if (activeUser?.id) {
+      getStories({ data: { userId: activeUser.id } }).then((list) => {
+        if (list) setStories(list)
+      })
+    }
+  }, [activeUser?.id])
 
   const visible =
     tab === 'saya'

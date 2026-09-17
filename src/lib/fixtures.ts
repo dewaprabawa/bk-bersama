@@ -28,6 +28,7 @@ export type Story = {
   content: string[]
   tag: Category
   likes: number
+  isLiked?: boolean
   mine: boolean
   isProtected?: boolean
   canDelete?: boolean
