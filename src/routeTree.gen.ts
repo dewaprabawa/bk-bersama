@@ -16,6 +16,7 @@ import { Route as AppInspirationRouteImport } from './routes/_app.inspiration'
 import { Route as AppFeedRouteImport } from './routes/_app.feed'
 import { Route as AppComposeRouteImport } from './routes/_app.compose'
 import { Route as AppAdminRouteImport } from './routes/_app.admin'
+import { Route as AppFeedIndexRouteImport } from './routes/_app.feed.index'
 import { Route as AppFeedStoryIdRouteImport } from './routes/_app.feed.$storyId'
 
 const AppRoute = AppRouteImport.update({
@@ -52,6 +53,11 @@ const AppAdminRoute = AppAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => AppRoute,
 } as any)
+const AppFeedIndexRoute = AppFeedIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppFeedRoute,
+} as any)
 const AppFeedStoryIdRoute = AppFeedStoryIdRouteImport.update({
   id: '/$storyId',
   path: '/$storyId',
@@ -66,15 +72,16 @@ export interface FileRoutesByFullPath {
   '/inspiration': typeof AppInspirationRoute
   '/profile': typeof AppProfileRoute
   '/feed/$storyId': typeof AppFeedStoryIdRoute
+  '/feed/': typeof AppFeedIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AppAdminRoute
   '/compose': typeof AppComposeRoute
-  '/feed': typeof AppFeedRouteWithChildren
   '/inspiration': typeof AppInspirationRoute
   '/profile': typeof AppProfileRoute
   '/feed/$storyId': typeof AppFeedStoryIdRoute
+  '/feed': typeof AppFeedIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -86,6 +93,7 @@ export interface FileRoutesById {
   '/_app/inspiration': typeof AppInspirationRoute
   '/_app/profile': typeof AppProfileRoute
   '/_app/feed/$storyId': typeof AppFeedStoryIdRoute
+  '/_app/feed/': typeof AppFeedIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -97,15 +105,16 @@ export interface FileRouteTypes {
     | '/inspiration'
     | '/profile'
     | '/feed/$storyId'
+    | '/feed/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/admin'
     | '/compose'
-    | '/feed'
     | '/inspiration'
     | '/profile'
     | '/feed/$storyId'
+    | '/feed'
   id:
     | '__root__'
     | '/'
@@ -116,6 +125,7 @@ export interface FileRouteTypes {
     | '/_app/inspiration'
     | '/_app/profile'
     | '/_app/feed/$storyId'
+    | '/_app/feed/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -174,6 +184,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/feed/': {
+      id: '/_app/feed/'
+      path: '/'
+      fullPath: '/feed/'
+      preLoaderRoute: typeof AppFeedIndexRouteImport
+      parentRoute: typeof AppFeedRoute
+    }
     '/_app/feed/$storyId': {
       id: '/_app/feed/$storyId'
       path: '/$storyId'
@@ -186,10 +203,12 @@ declare module '@tanstack/react-router' {
 
 interface AppFeedRouteChildren {
   AppFeedStoryIdRoute: typeof AppFeedStoryIdRoute
+  AppFeedIndexRoute: typeof AppFeedIndexRoute
 }
 
 const AppFeedRouteChildren: AppFeedRouteChildren = {
   AppFeedStoryIdRoute: AppFeedStoryIdRoute,
+  AppFeedIndexRoute: AppFeedIndexRoute,
 }
 
 const AppFeedRouteWithChildren =
