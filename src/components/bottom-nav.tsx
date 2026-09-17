@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { Home, Sparkles, PenLine, User, Shield } from 'lucide-react'
+import { Home, Sparkles, PenLine, User, Shield, CalendarCheck } from 'lucide-react'
 
 const NAV_LINK_CLASS =
   'flex flex-1 flex-col items-center gap-0.5 py-1 text-[10.5px] font-semibold text-ink-soft/60 transition-colors'
@@ -18,12 +18,12 @@ export function BottomNav() {
       </Link>
 
       <Link
-        to="/inspiration"
+        to="/counseling"
         className={NAV_LINK_CLASS}
         activeProps={{ className: `${NAV_LINK_CLASS} ${NAV_LINK_ACTIVE_CLASS}` }}
       >
-        <Sparkles className="h-4.5 w-4.5 text-amber-600" strokeWidth={2.2} />
-        Inspirasi
+        <CalendarCheck className="h-4.5 w-4.5 text-forest" strokeWidth={2.2} />
+        Konseling
       </Link>
 
       <Link

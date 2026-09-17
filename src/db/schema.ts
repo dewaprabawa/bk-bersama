@@ -58,3 +58,18 @@ export const inspirations = pgTable('inspirations', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
+export const counselingRequests = pgTable('counseling_requests', {
+  id: text('id').primaryKey(),
+  studentId: text('student_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  studentName: text('student_name').notNull(),
+  counselorId: text('counselor_id').references(() => users.id, { onDelete: 'set null' }),
+  counselorName: text('counselor_name'),
+  topic: text('topic').notNull(),
+  message: text('message').notNull(),
+  preferredDate: text('preferred_date').notNull(),
+  preferredTime: text('preferred_time').notNull(),
+  status: text('status').notNull().default('pending'),
+  counselorNote: text('counselor_note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})

@@ -14,6 +14,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppProfileRouteImport } from './routes/_app.profile'
 import { Route as AppInspirationRouteImport } from './routes/_app.inspiration'
 import { Route as AppFeedRouteImport } from './routes/_app.feed'
+import { Route as AppCounselingRouteImport } from './routes/_app.counseling'
 import { Route as AppComposeRouteImport } from './routes/_app.compose'
 import { Route as AppAdminRouteImport } from './routes/_app.admin'
 import { Route as AppFeedIndexRouteImport } from './routes/_app.feed.index'
@@ -43,6 +44,11 @@ const AppFeedRoute = AppFeedRouteImport.update({
   path: '/feed',
   getParentRoute: () => AppRoute,
 } as any)
+const AppCounselingRoute = AppCounselingRouteImport.update({
+  id: '/counseling',
+  path: '/counseling',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppComposeRoute = AppComposeRouteImport.update({
   id: '/compose',
   path: '/compose',
@@ -68,6 +74,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AppAdminRoute
   '/compose': typeof AppComposeRoute
+  '/counseling': typeof AppCounselingRoute
   '/feed': typeof AppFeedRouteWithChildren
   '/inspiration': typeof AppInspirationRoute
   '/profile': typeof AppProfileRoute
@@ -78,6 +85,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AppAdminRoute
   '/compose': typeof AppComposeRoute
+  '/counseling': typeof AppCounselingRoute
   '/inspiration': typeof AppInspirationRoute
   '/profile': typeof AppProfileRoute
   '/feed/$storyId': typeof AppFeedStoryIdRoute
@@ -89,6 +97,7 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/_app/admin': typeof AppAdminRoute
   '/_app/compose': typeof AppComposeRoute
+  '/_app/counseling': typeof AppCounselingRoute
   '/_app/feed': typeof AppFeedRouteWithChildren
   '/_app/inspiration': typeof AppInspirationRoute
   '/_app/profile': typeof AppProfileRoute
@@ -101,6 +110,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/compose'
+    | '/counseling'
     | '/feed'
     | '/inspiration'
     | '/profile'
@@ -111,6 +121,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/compose'
+    | '/counseling'
     | '/inspiration'
     | '/profile'
     | '/feed/$storyId'
@@ -121,6 +132,7 @@ export interface FileRouteTypes {
     | '/_app'
     | '/_app/admin'
     | '/_app/compose'
+    | '/_app/counseling'
     | '/_app/feed'
     | '/_app/inspiration'
     | '/_app/profile'
@@ -170,6 +182,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppFeedRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/counseling': {
+      id: '/_app/counseling'
+      path: '/counseling'
+      fullPath: '/counseling'
+      preLoaderRoute: typeof AppCounselingRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/compose': {
       id: '/_app/compose'
       path: '/compose'
@@ -217,6 +236,7 @@ const AppFeedRouteWithChildren =
 interface AppRouteChildren {
   AppAdminRoute: typeof AppAdminRoute
   AppComposeRoute: typeof AppComposeRoute
+  AppCounselingRoute: typeof AppCounselingRoute
   AppFeedRoute: typeof AppFeedRouteWithChildren
   AppInspirationRoute: typeof AppInspirationRoute
   AppProfileRoute: typeof AppProfileRoute
@@ -225,6 +245,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAdminRoute: AppAdminRoute,
   AppComposeRoute: AppComposeRoute,
+  AppCounselingRoute: AppCounselingRoute,
   AppFeedRoute: AppFeedRouteWithChildren,
   AppInspirationRoute: AppInspirationRoute,
   AppProfileRoute: AppProfileRoute,
