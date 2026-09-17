@@ -87,7 +87,21 @@ export const createCounselingRequest = createServerFn({ method: 'POST' })
     }
 
     await crCol.insertOne(newRequest)
-    return newRequest
+    return {
+      id: newRequest.id,
+      studentId: newRequest.studentId,
+      studentName: newRequest.studentName,
+      counselorId: newRequest.counselorId,
+      counselorName: newRequest.counselorName,
+      topic: newRequest.topic,
+      message: newRequest.message,
+      preferredDate: newRequest.preferredDate,
+      preferredTime: newRequest.preferredTime,
+      status: newRequest.status,
+      counselorNote: newRequest.counselorNote,
+      createdAt: newRequest.createdAt,
+      updatedAt: newRequest.updatedAt,
+    }
   })
 
 export const updateCounselingStatus = createServerFn({ method: 'POST' })

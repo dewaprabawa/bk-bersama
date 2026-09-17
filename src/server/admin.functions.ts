@@ -62,7 +62,18 @@ export const createMember = createServerFn({ method: 'POST' })
     }
 
     await users.insertOne(newUser)
-    return newUser
+    return {
+      id: newUser.id,
+      name: newUser.name,
+      role: newUser.role,
+      grade: newUser.grade,
+      phone: newUser.phone,
+      bio: newUser.bio,
+      address: newUser.address,
+      pin: newUser.pin,
+      avatarUrl: newUser.avatarUrl,
+      joinedAt: newUser.joinedAt,
+    }
   })
 
 export const deleteMember = createServerFn({ method: 'POST' })
@@ -132,5 +143,19 @@ export const getOrCreateDeviceAccount = createServerFn({ method: 'POST' })
     }
 
     await users.insertOne(newUser)
-    return { user: newUser, isNew: true }
+    return {
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        role: newUser.role,
+        grade: newUser.grade,
+        address: newUser.address,
+        phone: newUser.phone,
+        bio: newUser.bio,
+        pin: newUser.pin,
+        avatarUrl: newUser.avatarUrl,
+        joinedAt: newUser.joinedAt,
+      },
+      isNew: true,
+    }
   })

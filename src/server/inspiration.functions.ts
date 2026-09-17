@@ -48,19 +48,21 @@ export const generateDailyInspirations = createServerFn({ method: 'POST' }).hand
     }> = []
 
     if (apiKey) {
-      try {
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
-            messages: [
-              {
-                role: 'system',
-                content: `Anda adalah psikolog dan konselor Bimbingan Konseling (Guru BK) ahli kesehatan mental remaja.
+      const candidateModels = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'groq/compound-mini']
+      for (const model of candidateModels) {
+        try {
+          const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model,
+              messages: [
+                {
+                  role: 'system',
+                  content: `Anda adalah psikolog dan konselor Bimbingan Konseling (Guru BK) ahli kesehatan mental remaja.
 Tugas Anda menghasilkan 2 postingan inspirasi dan pertolongan pertama kesehatan mental (mengatasi mental breakdown, kecemasan akut, rasa putus asa, overthinking, atau keputusasaan bagi siswa/remaja).
 
 Format respon HARUS berupa JSON array valid dengan tepat 2 objek, contoh:
@@ -74,25 +76,30 @@ Format respon HARUS berupa JSON array valid dengan tepat 2 objek, contoh:
   }
 ]
 Kirimkan JSON array murni tanpa markdown pembungkus.`,
-              },
-              {
-                role: 'user',
-                content: 'Hasilkan 2 postingan inspirasi dan dukungan kesehatan mental hari ini.',
-              },
-            ],
-            temperature: 0.7,
-            max_tokens: 1200,
-          }),
-        })
+                },
+                {
+                  role: 'user',
+                  content: 'Hasilkan 2 postingan inspirasi dan dukungan kesehatan mental hari ini.',
+                },
+              ],
+              temperature: 0.7,
+              max_tokens: 1200,
+            }),
+          })
 
-        if (response.ok) {
-          const data = await response.json()
-          const rawContent = data.choices?.[0]?.message?.content || ''
-          const cleaned = rawContent.replace(/```json/g, '').replace(/```/g, '').trim()
-          generated = JSON.parse(cleaned)
+          if (response.ok) {
+            const data = await response.json()
+            const rawContent = data.choices?.[0]?.message?.content || ''
+            const cleaned = rawContent.replace(/```json/g, '').replace(/```/g, '').trim()
+            const parsed = JSON.parse(cleaned)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              generated = parsed
+              break
+            }
+          }
+        } catch (err) {
+          console.error(`Groq generation error with model ${model}:`, err)
         }
-      } catch (err) {
-        console.error('Groq generation error, using fallback:', err)
       }
     }
 
@@ -105,6 +112,7 @@ Kirimkan JSON array murni tanpa markdown pembungkus.`,
 
     for (const item of generated.slice(0, 2)) {
       const newId = `insp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      const now = new Date()
       const row: InspirationDoc = {
         id: newId,
         title: item.title,
@@ -112,10 +120,20 @@ Kirimkan JSON array murni tanpa markdown pembungkus.`,
         content: item.content,
         practicalTip: item.practicalTip || '',
         quote: item.quote || null,
-        createdAt: new Date(),
+        createdAt: now,
       }
       await inspCol.insertOne(row)
-      inserted.push(row)
+
+      // Return clean serializable object without MongoDB's mutated _id
+      inserted.push({
+        id: newId,
+        title: row.title,
+        category: row.category,
+        content: row.content,
+        practicalTip: row.practicalTip,
+        quote: row.quote,
+        createdAt: now,
+      })
     }
 
     return inserted
