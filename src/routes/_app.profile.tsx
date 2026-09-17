@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
-import { Camera, Check, ShieldCheck, UserPlus } from 'lucide-react'
+import { Camera, Check, ShieldCheck, UserPlus, LogOut } from 'lucide-react'
 
 import { AppTopBar } from '@/components/app-top-bar'
 import { useSession } from '@/lib/session'
@@ -16,7 +16,7 @@ export const Route = createFileRoute('/_app/profile')({
 function ProfilePage() {
   const initialData = Route.useLoaderData()
   const router = useRouter()
-  const { activeUser, isWatcher, updateActiveUser } = useSession()
+  const { activeUser, isWatcher, updateActiveUser, logout } = useSession()
 
   const [profileData, setProfileData] = useState(initialData)
   const [name, setName] = useState(initialData?.user?.name || '')
@@ -97,19 +97,19 @@ function ProfilePage() {
     <div>
       <AppTopBar title="Profil Saya" subtitle="Data untuk guru BK dan komunitas" />
 
-      {/* Permanent Single Account Badge */}
+      {/* Active Account Badge */}
       <div className="mx-4 mt-3 flex items-center justify-between rounded-2xl border border-[#e4d7bd] bg-paper-warm p-3">
         <div className="flex items-center gap-2">
           <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-forest/15 text-forest-dark">
             <ShieldCheck className="h-4 w-4" />
           </div>
           <div>
-            <p className="text-[11.5px] font-bold text-ink">Akun Permanen Perangkat</p>
-            <p className="text-[10.5px] text-ink-soft">1 Orang · 1 Akun (Tidak dapat berganti akun)</p>
+            <p className="text-[11.5px] font-bold text-ink">Akun Aktif</p>
+            <p className="text-[10.5px] text-ink-soft">Terhubung sebagai {activeUser?.name}</p>
           </div>
         </div>
         <span className="rounded-full bg-forest/10 px-2.5 py-1 text-[10px] font-bold text-forest-dark">
-          Terkunci
+          {isWatcher ? 'Guru BK' : 'Siswa'}
         </span>
       </div>
 
@@ -197,6 +197,19 @@ function ProfilePage() {
           ) : (
             'Simpan Perubahan'
           )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (window.confirm('Yakin ingin keluar dari akun ini? Anda dapat masuk kembali dengan Nama dan PIN Anda.')) {
+              logout()
+            }
+          }}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-full border border-rose/30 bg-rose/10 py-3 text-[14px] font-bold text-rose transition-colors hover:bg-rose/15 active:scale-[0.99]"
+        >
+          <LogOut className="h-4 w-4" />
+          Keluar Akun (Logout)
         </button>
       </div>
     </div>

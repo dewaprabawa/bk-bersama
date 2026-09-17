@@ -8,6 +8,7 @@ export const users = pgTable('users', {
   address: text('address').notNull().default(''),
   phone: text('phone').notNull().default(''),
   bio: text('bio').notNull().default(''),
+  pin: text('pin').notNull().default(''),
   avatarUrl: text('avatar_url'),
   joinedAt: timestamp('joined_at', { withTimezone: true }).defaultNow().notNull(),
 })

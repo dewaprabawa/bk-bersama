@@ -50,8 +50,8 @@ export function AppTopBar({
           </Link>
         ) : (
           <Link
-            to="/admin"
-            title="Kelola atau pilih akun di Portal Admin"
+            to={isWatcher ? '/admin' : '/profile'}
+            title={isWatcher ? 'Portal Admin Guru BK' : 'Lihat Profil Anda'}
             className={`flex max-w-[130px] shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
               isWatcher
                 ? 'border border-rose/30 bg-rose/15 text-rose'
