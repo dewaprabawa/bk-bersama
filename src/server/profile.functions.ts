@@ -1,20 +1,16 @@
 import { createServerFn } from '@tanstack/react-start'
-import { eq, inArray } from 'drizzle-orm'
-import { db } from '@/db'
-import { users, stories, likes } from '@/db/schema'
+import { getUsersCollection, getStoriesCollection, getLikesCollection } from '@/db'
 
 export const getProfile = createServerFn({ method: 'GET' })
   .inputValidator((data?: { userId?: string }) => data)
   .handler(async ({ data }) => {
     let user = null
+    const users = await getUsersCollection()
+    const stories = await getStoriesCollection()
+    const likes = await getLikesCollection()
 
     if (data?.userId && data.userId.trim()) {
-      const userList = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, data.userId.trim()))
-        .limit(1)
-      user = userList[0] || null
+      user = await users.findOne({ id: data.userId.trim() })
     }
 
     if (!user) {
@@ -27,27 +23,31 @@ export const getProfile = createServerFn({ method: 'GET' })
     }
 
     // Get user's stories count
-    const myStories = await db
-      .select({ id: stories.id })
-      .from(stories)
-      .where(eq(stories.authorId, user.id))
-
+    const myStories = await stories.find({ authorId: user.id }, { projection: { id: 1 } }).toArray()
     const myStoryIds = myStories.map((s) => s.id)
 
     let likesReceived = 0
     if (myStoryIds.length > 0) {
-      const myLikes = await db
-        .select({ id: likes.id })
-        .from(likes)
-        .where(inArray(likes.storyId, myStoryIds))
-      likesReceived = myLikes.length
+      likesReceived = await likes.countDocuments({ storyId: { $in: myStoryIds } })
     }
 
+    const joinedDate = user.joinedAt ? new Date(user.joinedAt) : new Date()
+    const joinedLabel = `Bergabung ${joinedDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}`
+
     return {
-      user,
+      user: {
+        id: user.id,
+        name: user.name,
+        role: user.role,
+        grade: user.grade,
+        address: user.address,
+        phone: user.phone,
+        bio: user.bio,
+        avatarUrl: user.avatarUrl,
+      },
       storiesCount: myStories.length,
       likesReceived,
-      joinedLabel: `Bergabung ${user.joinedAt.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}`,
+      joinedLabel,
     }
   })
 
@@ -68,17 +68,21 @@ export const updateProfile = createServerFn({ method: 'POST' })
       throw new Error('User ID wajib disertakan.')
     }
 
-    await db
-      .update(users)
-      .set({
-        name: data.name,
-        grade: data.grade,
-        address: data.address,
-        phone: data.phone,
-        bio: data.bio,
-        ...(data.avatarUrl !== undefined ? { avatarUrl: data.avatarUrl } : {}),
-      })
-      .where(eq(users.id, data.userId.trim()))
+    const users = await getUsersCollection()
+
+    await users.updateOne(
+      { id: data.userId.trim() },
+      {
+        $set: {
+          name: data.name,
+          grade: data.grade,
+          address: data.address,
+          phone: data.phone,
+          bio: data.bio,
+          ...(data.avatarUrl !== undefined ? { avatarUrl: data.avatarUrl } : {}),
+        },
+      },
+    )
 
     return { success: true }
   })

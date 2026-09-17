@@ -1,7 +1,11 @@
 import { createServerFn } from '@tanstack/react-start'
-import { desc, eq, inArray } from 'drizzle-orm'
-import { db } from '@/db'
-import { stories, comments, likes, users } from '@/db/schema'
+import {
+  getStoriesCollection,
+  getCommentsCollection,
+  getLikesCollection,
+  getUsersCollection,
+} from '@/db'
+import type { StoryDoc, CommentDoc, LikeDoc, UserDoc } from '@/db/schema'
 import type { Category, Story, Comment } from '@/lib/fixtures'
 
 export function formatTimeAgo(date: Date | string | number): string {
@@ -26,29 +30,29 @@ export const getStories = createServerFn({ method: 'GET' })
     let currentUserId: string | null = null
     let isWatcher = false
 
+    const users = await getUsersCollection()
+    const stories = await getStoriesCollection()
+    const comments = await getCommentsCollection()
+    const likes = await getLikesCollection()
+
     if (data?.userId && data.userId.trim()) {
       currentUserId = data.userId.trim()
-      const userList = await db.select().from(users).where(eq(users.id, currentUserId)).limit(1)
-      const currentUser = userList[0]
+      const currentUser = await users.findOne({ id: currentUserId })
       isWatcher = currentUser?.role === 'guru_bk'
     }
 
-    const allStories = await db.select().from(stories).orderBy(desc(stories.createdAt))
+    const allStories = await stories.find({}).sort({ createdAt: -1 }).toArray()
 
     if (allStories.length === 0) return []
 
     const storyIds = allStories.map((s) => s.id)
 
-    const allComments = await db
-      .select()
-      .from(comments)
-      .where(inArray(comments.storyId, storyIds))
-      .orderBy(comments.createdAt)
+    const allComments = await comments
+      .find({ storyId: { $in: storyIds } })
+      .sort({ createdAt: 1 })
+      .toArray()
 
-    const allLikes = await db
-      .select()
-      .from(likes)
-      .where(inArray(likes.storyId, storyIds))
+    const allLikes = await likes.find({ storyId: { $in: storyIds } }).toArray()
 
     const commentsByStoryId = new Map<string, Comment[]>()
     for (const c of allComments) {
@@ -101,26 +105,26 @@ export const getStoryById = createServerFn({ method: 'GET' })
     let currentUserId: string | null = null
     let isWatcher = false
 
+    const users = await getUsersCollection()
+    const stories = await getStoriesCollection()
+    const comments = await getCommentsCollection()
+    const likes = await getLikesCollection()
+
     if (data.userId && data.userId.trim()) {
       currentUserId = data.userId.trim()
-      const userList = await db.select().from(users).where(eq(users.id, currentUserId)).limit(1)
-      const currentUser = userList[0]
+      const currentUser = await users.findOne({ id: currentUserId })
       isWatcher = currentUser?.role === 'guru_bk'
     }
 
-    const found = await db.select().from(stories).where(eq(stories.id, data.id)).limit(1)
-    if (found.length === 0) return { story: null, isLiked: false, isWatcher }
+    const s = await stories.findOne({ id: data.id })
+    if (!s) return { story: null, isLiked: false, isWatcher }
 
-    const s = found[0]
+    const storyComments = await comments
+      .find({ storyId: s.id })
+      .sort({ createdAt: 1 })
+      .toArray()
 
-    const storyComments = await db
-      .select()
-      .from(comments)
-      .where(eq(comments.storyId, s.id))
-      .orderBy(comments.createdAt)
-
-    const storyLikes = await db.select().from(likes).where(eq(likes.storyId, s.id))
-
+    const storyLikes = await likes.find({ storyId: s.id }).toArray()
     const isLiked = Boolean(currentUserId) && storyLikes.some((l) => l.userId === currentUserId)
 
     const mappedComments: Comment[] = storyComments.map((c) => ({
@@ -167,15 +171,16 @@ export const createStory = createServerFn({ method: 'POST' })
   )
   .handler(async ({ data }) => {
     if (!data.userId || !data.userId.trim()) {
-      throw new Error('Silakan buat atau pilih akun pengguna terlebih dahulu di Menu Admin.')
+      throw new Error('Silakan buat atau pilih akun pengguna terlebih dahulu.')
     }
 
-    const userList = await db.select().from(users).where(eq(users.id, data.userId.trim())).limit(1)
-    if (userList.length === 0) {
-      throw new Error('Akun pengguna tidak ditemukan. Silakan tambahkan di Menu Admin.')
-    }
+    const users = await getUsersCollection()
+    const stories = await getStoriesCollection()
 
-    const currentUser = userList[0]
+    const currentUser = await users.findOne({ id: data.userId.trim() })
+    if (!currentUser) {
+      throw new Error('Akun pengguna tidak ditemukan. Silakan login kembali.')
+    }
 
     const paragraphs = data.content
       .split('\n')
@@ -187,7 +192,7 @@ export const createStory = createServerFn({ method: 'POST' })
     const avatarHue = data.anonymous ? 35 : 205
     const excerpt = (paragraphs[0] || data.title).slice(0, 140)
 
-    await db.insert(stories).values({
+    const newStory: StoryDoc = {
       id: newId,
       authorId: currentUser.id,
       authorName: currentUser.name,
@@ -199,10 +204,11 @@ export const createStory = createServerFn({ method: 'POST' })
       excerpt,
       content: paragraphs.length > 0 ? paragraphs : [data.content],
       tag: data.tag,
-      isProtected: true, // Monitored by default to prevent bullying
+      isProtected: true,
       createdAt: new Date(),
-    })
+    }
 
+    await stories.insertOne(newStory)
     return { id: newId }
   })
 
@@ -213,21 +219,27 @@ export const deleteStory = createServerFn({ method: 'POST' })
       throw new Error('User ID tidak valid.')
     }
 
-    const userList = await db.select().from(users).where(eq(users.id, data.userId.trim())).limit(1)
-    const caller = userList[0]
+    const users = await getUsersCollection()
+    const stories = await getStoriesCollection()
+    const comments = await getCommentsCollection()
+    const likes = await getLikesCollection()
+
+    const caller = await users.findOne({ id: data.userId.trim() })
     const isWatcher = caller?.role === 'guru_bk'
 
-    const target = await db.select().from(stories).where(eq(stories.id, data.storyId)).limit(1)
-    if (target.length === 0) {
+    const story = await stories.findOne({ id: data.storyId })
+    if (!story) {
       throw new Error('Cerita tidak ditemukan.')
     }
 
-    const story = target[0]
     if (story.authorId !== data.userId.trim() && !isWatcher) {
       throw new Error('Kamu tidak memiliki izin untuk menghapus cerita ini.')
     }
 
-    await db.delete(stories).where(eq(stories.id, data.storyId))
+    await stories.deleteOne({ id: data.storyId })
+    await comments.deleteMany({ storyId: data.storyId })
+    await likes.deleteMany({ storyId: data.storyId })
+
     return { success: true }
   })
 
@@ -238,21 +250,22 @@ export const deleteComment = createServerFn({ method: 'POST' })
       throw new Error('User ID tidak valid.')
     }
 
-    const userList = await db.select().from(users).where(eq(users.id, data.userId.trim())).limit(1)
-    const caller = userList[0]
+    const users = await getUsersCollection()
+    const comments = await getCommentsCollection()
+
+    const caller = await users.findOne({ id: data.userId.trim() })
     const isWatcher = caller?.role === 'guru_bk'
 
-    const target = await db.select().from(comments).where(eq(comments.id, data.commentId)).limit(1)
-    if (target.length === 0) {
+    const comment = await comments.findOne({ id: data.commentId })
+    if (!comment) {
       throw new Error('Komentar tidak ditemukan.')
     }
 
-    const comment = target[0]
     if (comment.authorId !== data.userId.trim() && !isWatcher) {
       throw new Error('Kamu tidak memiliki izin untuk menghapus komentar ini.')
     }
 
-    await db.delete(comments).where(eq(comments.id, data.commentId))
+    await comments.deleteOne({ id: data.commentId })
     return { success: true }
   })
 
@@ -263,18 +276,19 @@ export const toggleStoryProtection = createServerFn({ method: 'POST' })
       throw new Error('User ID tidak valid.')
     }
 
-    const userList = await db.select().from(users).where(eq(users.id, data.userId.trim())).limit(1)
-    const caller = userList[0]
+    const users = await getUsersCollection()
+    const stories = await getStoriesCollection()
 
+    const caller = await users.findOne({ id: data.userId.trim() })
     if (caller?.role !== 'guru_bk') {
       throw new Error('Hanya Guru BK / Watcher yang dapat mengatur status pengawasan.')
     }
 
-    const target = await db.select().from(stories).where(eq(stories.id, data.storyId)).limit(1)
-    if (target.length === 0) throw new Error('Cerita tidak ditemukan.')
+    const story = await stories.findOne({ id: data.storyId })
+    if (!story) throw new Error('Cerita tidak ditemukan.')
 
-    const updated = !target[0].isProtected
-    await db.update(stories).set({ isProtected: updated }).where(eq(stories.id, data.storyId))
+    const updated = !story.isProtected
+    await stories.updateOne({ id: data.storyId }, { $set: { isProtected: updated } })
     return { isProtected: updated }
   })
 
@@ -288,36 +302,42 @@ export const toggleStoryLike = createServerFn({ method: 'POST' })
     }
 
     const callerId = data.userId.trim()
+    const users = await getUsersCollection()
+    const likes = await getLikesCollection()
 
-    // Ensure user exists in database so foreign key doesn't fail
-    const userList = await db.select().from(users).where(eq(users.id, callerId)).limit(1)
-    if (userList.length === 0) {
-      await db.insert(users).values({
+    // Ensure user exists
+    const user = await users.findOne({ id: callerId })
+    if (!user) {
+      const newUser: UserDoc = {
         id: callerId,
         name: data.userName?.trim() || 'Siswa',
         grade: 'Siswa',
         role: 'siswa',
+        address: '',
+        phone: '',
+        bio: 'Siswa BK Bersama.',
+        pin: '',
+        avatarUrl: null,
         joinedAt: new Date(),
-      })
+      }
+      await users.insertOne(newUser)
     }
 
-    const existing = await db
-      .select()
-      .from(likes)
-      .where(eq(likes.storyId, data.storyId))
+    const existingLike = await likes.findOne({ storyId: data.storyId, userId: callerId })
+    const totalLikes = await likes.countDocuments({ storyId: data.storyId })
 
-    const userLike = existing.find((l) => l.userId === callerId)
-
-    if (userLike) {
-      await db.delete(likes).where(eq(likes.id, userLike.id))
-      return { liked: false, likesCount: Math.max(0, existing.length - 1) }
+    if (existingLike) {
+      await likes.deleteOne({ id: existingLike.id })
+      return { liked: false, likesCount: Math.max(0, totalLikes - 1) }
     } else {
-      await db.insert(likes).values({
+      const newLike: LikeDoc = {
         id: `like-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         storyId: data.storyId,
         userId: callerId,
-      })
-      return { liked: true, likesCount: existing.length + 1 }
+        createdAt: new Date(),
+      }
+      await likes.insertOne(newLike)
+      return { liked: true, likesCount: totalLikes + 1 }
     }
   })
 
@@ -337,9 +357,12 @@ export const createComment = createServerFn({ method: 'POST' })
       throw new Error('Isi komentar tidak boleh kosong.')
     }
 
-    // Verify target story exists in database
-    const storyList = await db.select().from(stories).where(eq(stories.id, storyId)).limit(1)
-    if (storyList.length === 0) {
+    const stories = await getStoriesCollection()
+    const comments = await getCommentsCollection()
+    const users = await getUsersCollection()
+
+    const story = await stories.findOne({ id: storyId })
+    if (!story) {
       throw new Error('Cerita tidak ditemukan.')
     }
 
@@ -347,31 +370,41 @@ export const createComment = createServerFn({ method: 'POST' })
     let authorName = payload.userName?.trim() || 'Siswa'
 
     if (callerId) {
-      const userList = await db.select().from(users).where(eq(users.id, callerId)).limit(1)
-      if (userList.length === 0) {
-        await db.insert(users).values({
+      const user = await users.findOne({ id: callerId })
+      if (!user) {
+        await users.insertOne({
           id: callerId,
           name: authorName,
           grade: 'Siswa',
           role: 'siswa',
+          address: '',
+          phone: '',
+          bio: 'Siswa BK Bersama.',
+          pin: '',
+          avatarUrl: null,
           joinedAt: new Date(),
         })
       } else {
-        authorName = userList[0].name
+        authorName = user.name
       }
     } else {
       callerId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-      await db.insert(users).values({
+      await users.insertOne({
         id: callerId,
         name: authorName,
         grade: 'Siswa',
         role: 'siswa',
+        address: '',
+        phone: '',
+        bio: 'Siswa BK Bersama.',
+        pin: '',
+        avatarUrl: null,
         joinedAt: new Date(),
       })
     }
 
     const commentId = `c-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-    const newComment = {
+    const newComment: CommentDoc = {
       id: commentId,
       storyId,
       authorId: callerId,
@@ -379,7 +412,8 @@ export const createComment = createServerFn({ method: 'POST' })
       text,
       createdAt: new Date(),
     }
-    await db.insert(comments).values(newComment)
+
+    await comments.insertOne(newComment)
 
     return {
       id: commentId,
@@ -390,4 +424,3 @@ export const createComment = createServerFn({ method: 'POST' })
       canDelete: true,
     }
   })
-

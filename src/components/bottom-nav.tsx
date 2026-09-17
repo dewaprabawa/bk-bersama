@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { Home, Sparkles, PenLine, User, Shield, CalendarCheck } from 'lucide-react'
+import { Home, PenLine, User, Shield, CalendarCheck } from 'lucide-react'
 
 const NAV_LINK_CLASS =
   'flex flex-1 flex-col items-center gap-0.5 py-1 text-[10.5px] font-semibold text-ink-soft/60 transition-colors'

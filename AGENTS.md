@@ -14,6 +14,7 @@ BK Bersama is a mobile-first story-sharing web app for students and school couns
 | Frontend | React 19, TanStack Router v1 |
 | Build | Vite 7 |
 | Styling | Tailwind CSS 4 (custom "paper & cork" theme, no shadcn) |
+| Database | MongoDB Atlas (official `mongodb` driver) |
 | Icons | lucide-react |
 | Language | TypeScript 5.9 (strict mode) |
 | Deployment | Netlify |

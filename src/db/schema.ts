@@ -1,76 +1,72 @@
-import { pgTable, text, timestamp, boolean, integer, jsonb, uniqueIndex } from 'drizzle-orm/pg-core'
+export type UserRole = 'siswa' | 'guru_bk'
 
-export const users = pgTable('users', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  grade: text('grade').notNull(),
-  role: text('role').notNull().default('siswa'), // 'siswa' | 'guru_bk'
-  address: text('address').notNull().default(''),
-  phone: text('phone').notNull().default(''),
-  bio: text('bio').notNull().default(''),
-  pin: text('pin').notNull().default(''),
-  avatarUrl: text('avatar_url'),
-  joinedAt: timestamp('joined_at', { withTimezone: true }).defaultNow().notNull(),
-})
+export type UserDoc = {
+  id: string
+  name: string
+  grade: string
+  role: string // 'siswa' | 'guru_bk'
+  address: string
+  phone: string
+  bio: string
+  pin: string
+  avatarUrl: string | null
+  joinedAt: Date
+}
 
-export const stories = pgTable('stories', {
-  id: text('id').primaryKey(),
-  authorId: text('author_id').references(() => users.id, { onDelete: 'set null' }),
-  authorName: text('author_name').notNull(),
-  grade: text('grade').notNull(),
-  isAnonymous: boolean('is_anonymous').notNull().default(false),
-  avatarLetter: text('avatar_letter').notNull().default('?'),
-  avatarHue: integer('avatar_hue').notNull().default(205),
-  title: text('title').notNull(),
-  excerpt: text('excerpt').notNull(),
-  content: jsonb('content').$type<string[]>().notNull(),
-  tag: text('tag').notNull(),
-  isProtected: boolean('is_protected').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-})
+export type StoryDoc = {
+  id: string
+  authorId: string | null
+  authorName: string
+  grade: string
+  isAnonymous: boolean
+  avatarLetter: string
+  avatarHue: number
+  title: string
+  excerpt: string
+  content: string[]
+  tag: string
+  isProtected: boolean
+  createdAt: Date
+}
 
-export const comments = pgTable('comments', {
-  id: text('id').primaryKey(),
-  storyId: text('story_id').notNull().references(() => stories.id, { onDelete: 'cascade' }),
-  authorId: text('author_id').references(() => users.id, { onDelete: 'set null' }),
-  authorName: text('author_name').notNull(),
-  text: text('text').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-})
+export type CommentDoc = {
+  id: string
+  storyId: string
+  authorId: string | null
+  authorName: string
+  text: string
+  createdAt: Date
+}
 
-export const likes = pgTable(
-  'likes',
-  {
-    id: text('id').primaryKey(),
-    storyId: text('story_id').notNull().references(() => stories.id, { onDelete: 'cascade' }),
-    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [uniqueIndex('story_user_like_idx').on(table.storyId, table.userId)],
-)
+export type LikeDoc = {
+  id: string
+  storyId: string
+  userId: string
+  createdAt: Date
+}
 
-export const inspirations = pgTable('inspirations', {
-  id: text('id').primaryKey(),
-  title: text('title').notNull(),
-  category: text('category').notNull(),
-  content: text('content').notNull(),
-  practicalTip: text('practical_tip').notNull(),
-  quote: text('quote'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-})
+export type InspirationDoc = {
+  id: string
+  title: string
+  category: string
+  content: string
+  practicalTip: string
+  quote: string | null
+  createdAt: Date
+}
 
-export const counselingRequests = pgTable('counseling_requests', {
-  id: text('id').primaryKey(),
-  studentId: text('student_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  studentName: text('student_name').notNull(),
-  counselorId: text('counselor_id').references(() => users.id, { onDelete: 'set null' }),
-  counselorName: text('counselor_name'),
-  topic: text('topic').notNull(),
-  message: text('message').notNull(),
-  preferredDate: text('preferred_date').notNull(),
-  preferredTime: text('preferred_time').notNull(),
-  status: text('status').notNull().default('pending'),
-  counselorNote: text('counselor_note'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-})
+export type CounselingRequestDoc = {
+  id: string
+  studentId: string
+  studentName: string
+  counselorId: string | null
+  counselorName: string | null
+  topic: string
+  message: string
+  preferredDate: string
+  preferredTime: string
+  status: 'pending' | 'accepted' | 'rejected'
+  counselorNote: string | null
+  createdAt: Date
+  updatedAt: Date
+}

@@ -1,7 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
-import { eq, sql } from 'drizzle-orm'
-import { db } from '@/db'
-import { users } from '@/db/schema'
+import { getUsersCollection } from '@/db'
+import type { UserDoc } from '@/db/schema'
 
 export function hashPin(pin: string): string {
   let h1 = 0xdeadbeef ^ 0
@@ -15,6 +14,10 @@ export function hashPin(pin: string): string {
   h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
   h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16)
+}
+
+function escapeRegex(text: string) {
+  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')
 }
 
 export const registerUser = createServerFn({ method: 'POST' })
@@ -36,19 +39,19 @@ export const registerUser = createServerFn({ method: 'POST' })
     if (!grade) throw new Error(role === 'guru_bk' ? 'Jabatan/Bidang wajib diisi.' : 'Kelas wajib diisi.')
     if (!pin || pin.length < 4) throw new Error('PIN minimal 4 digit.')
 
-    // Check if name already exists (case-insensitive)
-    const existing = await db
-      .select()
-      .from(users)
-      .where(sql`LOWER(${users.name}) = LOWER(${name})`)
-      .limit(1)
+    const users = await getUsersCollection()
 
-    if (existing.length > 0) {
+    // Case-insensitive name lookup
+    const existing = await users.findOne({
+      name: { $regex: new RegExp(`^${escapeRegex(name)}$`, 'i') },
+    })
+
+    if (existing) {
       throw new Error('Nama ini sudah terdaftar. Silakan login atau gunakan nama lain.')
     }
 
     const newId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-    const newUser = {
+    const newUser: UserDoc = {
       id: newId,
       name,
       role,
@@ -61,7 +64,7 @@ export const registerUser = createServerFn({ method: 'POST' })
       joinedAt: new Date(),
     }
 
-    await db.insert(users).values(newUser)
+    await users.insertOne(newUser)
 
     return {
       user: {
@@ -91,19 +94,17 @@ export const loginUser = createServerFn({ method: 'POST' })
     if (!name) throw new Error('Nama lengkap wajib diisi.')
     if (!pin) throw new Error('PIN wajib diisi.')
 
-    const matching = await db
-      .select()
-      .from(users)
-      .where(sql`LOWER(${users.name}) = LOWER(${name})`)
-      .limit(1)
+    const users = await getUsersCollection()
 
-    if (matching.length === 0) {
+    const user = await users.findOne({
+      name: { $regex: new RegExp(`^${escapeRegex(name)}$`, 'i') },
+    })
+
+    if (!user) {
       throw new Error('Akun dengan nama tersebut tidak ditemukan. Silakan periksa kembali atau buat akun baru.')
     }
 
-    const user = matching[0]
-
-    // If user has an existing PIN, verify it
+    // Verify PIN
     if (user.pin && user.pin !== '') {
       const hashed = hashPin(pin)
       if (user.pin !== hashed && user.pin !== pin) {
@@ -111,10 +112,7 @@ export const loginUser = createServerFn({ method: 'POST' })
       }
     } else {
       // Legacy user without PIN: set their PIN now
-      await db
-        .update(users)
-        .set({ pin: hashPin(pin) })
-        .where(eq(users.id, user.id))
+      await users.updateOne({ id: user.id }, { $set: { pin: hashPin(pin) } })
     }
 
     return {
@@ -137,15 +135,11 @@ export const getCurrentUser = createServerFn({ method: 'POST' })
     const userId = data?.userId?.trim()
     if (!userId) return { user: null }
 
-    const found = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1)
+    const users = await getUsersCollection()
+    const user = await users.findOne({ id: userId })
 
-    if (found.length === 0) return { user: null }
+    if (!user) return { user: null }
 
-    const user = found[0]
     return {
       user: {
         id: user.id,

@@ -1,7 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
-import { desc, eq } from 'drizzle-orm'
-import { db } from '@/db'
-import { inspirations } from '@/db/schema'
+import { getInspirationsCollection } from '@/db'
+import type { InspirationDoc } from '@/db/schema'
 
 export type InspirationItem = {
   id: string
@@ -101,10 +100,12 @@ Kirimkan JSON array murni tanpa markdown pembungkus.`,
       generated = FALLBACK_INSPIRATIONS
     }
 
+    const inspCol = await getInspirationsCollection()
     const inserted: InspirationItem[] = []
+
     for (const item of generated.slice(0, 2)) {
       const newId = `insp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-      const row = {
+      const row: InspirationDoc = {
         id: newId,
         title: item.title,
         category: item.category || 'Dukungan Emosional',
@@ -113,7 +114,7 @@ Kirimkan JSON array murni tanpa markdown pembungkus.`,
         quote: item.quote || null,
         createdAt: new Date(),
       }
-      await db.insert(inspirations).values(row)
+      await inspCol.insertOne(row)
       inserted.push(row)
     }
 
@@ -123,20 +124,30 @@ Kirimkan JSON array murni tanpa markdown pembungkus.`,
 
 export const getInspirations = createServerFn({ method: 'GET' }).handler(
   async (): Promise<InspirationItem[]> => {
-    let list = await db.select().from(inspirations).orderBy(desc(inspirations.createdAt))
+    const inspCol = await getInspirationsCollection()
+    const rows = await inspCol.find({}).sort({ createdAt: -1 }).toArray()
 
     // If no inspirations exist yet, auto-generate the first 2
-    if (list.length === 0) {
-      list = await generateDailyInspirations()
+    if (rows.length === 0) {
+      return await generateDailyInspirations()
     }
 
-    return list
+    return rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      category: r.category,
+      content: r.content,
+      practicalTip: r.practicalTip,
+      quote: r.quote,
+      createdAt: r.createdAt,
+    }))
   },
 )
 
 export const deleteInspiration = createServerFn({ method: 'POST' })
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {
-    await db.delete(inspirations).where(eq(inspirations.id, data.id))
+    const inspCol = await getInspirationsCollection()
+    await inspCol.deleteOne({ id: data.id })
     return { success: true }
   })

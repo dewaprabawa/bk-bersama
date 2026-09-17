@@ -2,12 +2,10 @@ import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
 import {
   CalendarCheck,
-  Clock,
   Send,
   CheckCircle,
   XCircle,
   Hourglass,
-  MessageCircle,
   ChevronDown,
   ChevronUp,
   ShieldCheck,
@@ -185,7 +183,6 @@ function CounselingPage() {
               key={req.id}
               request={req}
               isWatcher={isWatcher}
-              activeUser={activeUser}
               onStatusChange={async (requestId, status, note) => {
                 if (!activeUser) return
                 await updateCounselingStatus({
@@ -317,12 +314,10 @@ function CounselingPage() {
 function RequestCard({
   request,
   isWatcher,
-  activeUser,
   onStatusChange,
 }: {
   request: CounselingRequest
   isWatcher: boolean
-  activeUser: any
   onStatusChange: (id: string, status: 'accepted' | 'rejected', note?: string) => Promise<void>
 }) {
   const [expanded, setExpanded] = useState(false)

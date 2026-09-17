@@ -1,30 +1,42 @@
 import { createServerFn } from '@tanstack/react-start'
-import { desc, eq } from 'drizzle-orm'
-import { db } from '@/db'
-import { counselingRequests, users } from '@/db/schema'
+import { getCounselingRequestsCollection, getUsersCollection } from '@/db'
+import type { CounselingRequestDoc } from '@/db/schema'
 
 export const getCounselingRequests = createServerFn({ method: 'GET' })
   .inputValidator((data?: { userId?: string; role?: string }) => data || {})
   .handler(async ({ data }) => {
     const payload = data || {}
+    const crCol = await getCounselingRequestsCollection()
+
+    const formatRequest = (r: CounselingRequestDoc): CounselingRequestDoc => ({
+      id: r.id,
+      studentId: r.studentId,
+      studentName: r.studentName,
+      counselorId: r.counselorId,
+      counselorName: r.counselorName,
+      topic: r.topic,
+      message: r.message,
+      preferredDate: r.preferredDate,
+      preferredTime: r.preferredTime,
+      status: r.status,
+      counselorNote: r.counselorNote,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    })
 
     if (payload.role === 'guru_bk') {
       // Guru BK sees all requests
-      const rows = await db
-        .select()
-        .from(counselingRequests)
-        .orderBy(desc(counselingRequests.createdAt))
-      return rows
+      const rows = await crCol.find({}).sort({ createdAt: -1 }).toArray()
+      return rows.map(formatRequest)
     }
 
     if (payload.userId) {
       // Student sees only their own requests
-      const rows = await db
-        .select()
-        .from(counselingRequests)
-        .where(eq(counselingRequests.studentId, payload.userId))
-        .orderBy(desc(counselingRequests.createdAt))
-      return rows
+      const rows = await crCol
+        .find({ studentId: payload.userId })
+        .sort({ createdAt: -1 })
+        .toArray()
+      return rows.map(formatRequest)
     }
 
     return []
@@ -49,19 +61,16 @@ export const createCounselingRequest = createServerFn({ method: 'POST' })
       throw new Error('Tanggal dan jam konseling wajib dipilih.')
     }
 
-    // Find a counselor (guru_bk) to assign
-    const counselors = await db
-      .select()
-      .from(users)
-      .where(eq(users.role, 'guru_bk'))
-      .limit(1)
+    const users = await getUsersCollection()
+    const crCol = await getCounselingRequestsCollection()
 
-    const counselor = counselors[0] || null
+    // Find a counselor (guru_bk) to assign
+    const counselor = await users.findOne({ role: 'guru_bk' })
 
     const id = `cr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
     const now = new Date()
 
-    const newRequest = {
+    const newRequest: CounselingRequestDoc = {
       id,
       studentId: data.studentId,
       studentName: data.studentName,
@@ -77,7 +86,7 @@ export const createCounselingRequest = createServerFn({ method: 'POST' })
       updatedAt: now,
     }
 
-    await db.insert(counselingRequests).values(newRequest)
+    await crCol.insertOne(newRequest)
     return newRequest
   })
 
@@ -96,16 +105,20 @@ export const updateCounselingStatus = createServerFn({ method: 'POST' })
       throw new Error('Request ID dan status wajib diisi.')
     }
 
-    await db
-      .update(counselingRequests)
-      .set({
-        status: data.status,
-        counselorNote: data.counselorNote?.trim() || null,
-        counselorId: data.counselorId,
-        counselorName: data.counselorName,
-        updatedAt: new Date(),
-      })
-      .where(eq(counselingRequests.id, data.requestId))
+    const crCol = await getCounselingRequestsCollection()
+
+    await crCol.updateOne(
+      { id: data.requestId },
+      {
+        $set: {
+          status: data.status,
+          counselorNote: data.counselorNote?.trim() || null,
+          counselorId: data.counselorId,
+          counselorName: data.counselorName,
+          updatedAt: new Date(),
+        },
+      },
+    )
 
     return { success: true, status: data.status }
   })

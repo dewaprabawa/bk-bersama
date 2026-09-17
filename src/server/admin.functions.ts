@@ -1,13 +1,15 @@
 import { createServerFn } from '@tanstack/react-start'
-import { desc, eq } from 'drizzle-orm'
-import { db } from '@/db'
-import { users, stories } from '@/db/schema'
+import { getUsersCollection, getStoriesCollection } from '@/db'
+import type { UserDoc } from '@/db/schema'
 
 export const getUsersList = createServerFn({ method: 'GET' }).handler(async () => {
-  const allUsers = await db.select().from(users).orderBy(desc(users.joinedAt))
+  const users = await getUsersCollection()
+  const stories = await getStoriesCollection()
+
+  const allUsers = await users.find({}).sort({ joinedAt: -1 }).toArray()
 
   // Compute story count for each user
-  const allStories = await db.select({ authorId: stories.authorId }).from(stories)
+  const allStories = await stories.find({}, { projection: { authorId: 1 } }).toArray()
   const countByUserId = new Map<string, number>()
   for (const s of allStories) {
     if (s.authorId) {
@@ -16,7 +18,15 @@ export const getUsersList = createServerFn({ method: 'GET' }).handler(async () =
   }
 
   return allUsers.map((u) => ({
-    ...u,
+    id: u.id,
+    name: u.name,
+    role: u.role,
+    grade: u.grade,
+    address: u.address,
+    phone: u.phone,
+    bio: u.bio,
+    avatarUrl: u.avatarUrl,
+    joinedAt: u.joinedAt,
     storiesCount: countByUserId.get(u.id) || 0,
   }))
 })
@@ -36,26 +46,30 @@ export const createMember = createServerFn({ method: 'POST' })
       throw new Error('Nama dan Kelas/Jabatan wajib diisi.')
     }
 
+    const users = await getUsersCollection()
     const newId = `user-${Date.now()}`
-    const newUser = {
+    const newUser: UserDoc = {
       id: newId,
       name: data.name.trim(),
       role: data.role,
       grade: data.grade.trim(),
       phone: data.phone?.trim() || '',
       bio: data.bio?.trim() || '',
+      address: '',
+      pin: '',
       avatarUrl: null,
       joinedAt: new Date(),
     }
 
-    await db.insert(users).values(newUser)
+    await users.insertOne(newUser)
     return newUser
   })
 
 export const deleteMember = createServerFn({ method: 'POST' })
   .inputValidator((data: { userId: string }) => data)
   .handler(async ({ data }) => {
-    await db.delete(users).where(eq(users.id, data.userId))
+    const users = await getUsersCollection()
+    await users.deleteOne({ id: data.userId })
     return { success: true }
   })
 
@@ -67,22 +81,32 @@ export const getOrCreateDeviceAccount = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const payload = data || {}
     const requestedId = payload.deviceUserId?.trim()
+    const users = await getUsersCollection()
 
-    // 1. If deviceUserId was provided and valid, check if that user already exists in DB
+    // 1. Check if user already exists
     if (requestedId && requestedId !== 'undefined' && requestedId !== 'null') {
-      const existing = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, requestedId))
-        .limit(1)
-
-      if (existing.length > 0) {
-        return { user: existing[0], isNew: false }
+      const existing = await users.findOne({ id: requestedId })
+      if (existing) {
+        return {
+          user: {
+            id: existing.id,
+            name: existing.name,
+            role: existing.role,
+            grade: existing.grade,
+            address: existing.address,
+            phone: existing.phone,
+            bio: existing.bio,
+            pin: existing.pin,
+            avatarUrl: existing.avatarUrl,
+            joinedAt: existing.joinedAt,
+          },
+          isNew: false,
+        }
       }
     }
 
-    // 2. Fresh visitor: create a unique single account for this device
-    const allUsers = await db.select({ id: users.id }).from(users).limit(1)
+    // 2. Fresh visitor account fallback
+    const allUsers = await users.find({}, { projection: { id: 1 } }).limit(1).toArray()
     let role: string = payload.initialRole || 'siswa'
     let name = payload.initialName?.trim() || `Siswa #${Math.floor(1000 + Math.random() * 9000)}`
     let grade = 'Siswa'
@@ -94,7 +118,7 @@ export const getOrCreateDeviceAccount = createServerFn({ method: 'POST' })
     }
 
     const newId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-    const newUser = {
+    const newUser: UserDoc = {
       id: newId,
       name,
       role,
@@ -102,11 +126,11 @@ export const getOrCreateDeviceAccount = createServerFn({ method: 'POST' })
       address: '',
       phone: '',
       bio: role === 'guru_bk' ? 'Guru BK pendamping siswa.' : 'Siswa BK Bersama.',
+      pin: '',
       avatarUrl: null,
       joinedAt: new Date(),
     }
 
-    await db.insert(users).values(newUser)
+    await users.insertOne(newUser)
     return { user: newUser, isNew: true }
   })
-
