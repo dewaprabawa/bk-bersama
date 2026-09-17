@@ -1,3 +1,5 @@
+import * as nodeCrypto from 'node:crypto'
+import { createRequire } from 'node:module'
 import { MongoClient, type Db } from 'mongodb'
 import dns from 'node:dns'
 import type {
@@ -8,6 +10,33 @@ import type {
   InspirationDoc,
   CounselingRequestDoc,
 } from './schema'
+
+// Polyfill global require for bundled ESM environments (e.g. Vercel serverless)
+// where CJS dependencies like MongoDB driver's SCRAM-SHA-1 rely on dynamic require('crypto')
+function setupCryptoRequire() {
+  const req = typeof createRequire === 'function' ? createRequire(import.meta.url) : null
+  const existingRequire = (globalThis as any).require
+  const customRequire = (id: string) => {
+    if (id === 'crypto' || id === 'node:crypto') {
+      return nodeCrypto
+    }
+    if (existingRequire) {
+      return existingRequire(id)
+    }
+    if (req) {
+      return req(id)
+    }
+    throw new Error(`Cannot require "${id}" in ES module context`)
+  }
+
+  ;(globalThis as any).require = customRequire
+  if (typeof global !== 'undefined') {
+    ;(global as any).require = customRequire
+  }
+}
+
+// Call immediately on module evaluation
+setupCryptoRequire()
 
 // Set DNS servers to Google / Cloudflare if local SRV resolution fails (especially on Windows)
 try {
@@ -41,16 +70,13 @@ declare global {
   var _mongoClientPromise: Promise<MongoClient> | undefined
 }
 
-let clientPromise: Promise<MongoClient>
-
-if (!globalThis._mongoClientPromise) {
-  const client = new MongoClient(uri)
-  globalThis._mongoClientPromise = client.connect()
-}
-clientPromise = globalThis._mongoClientPromise
-
 export async function getDb(): Promise<Db> {
-  const client = await clientPromise
+  setupCryptoRequire()
+  if (!globalThis._mongoClientPromise) {
+    const client = new MongoClient(uri)
+    globalThis._mongoClientPromise = client.connect()
+  }
+  const client = await globalThis._mongoClientPromise
   return client.db(dbName)
 }
 
