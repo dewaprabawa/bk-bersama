@@ -1,6 +1,6 @@
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
-import { Eye, EyeOff, Shield, UserPlus } from 'lucide-react'
+import { Eye, EyeOff, UserPlus } from 'lucide-react'
 
 import { AppTopBar } from '@/components/app-top-bar'
 import { categories, type Category } from '@/lib/fixtures'
@@ -60,17 +60,10 @@ function ComposePage() {
         <div className="px-4 py-8">
           <div className="rounded-2xl border border-dashed border-[#d8c7a3] bg-paper-warm/80 p-6 text-center">
             <UserPlus className="mx-auto h-10 w-10 text-forest-dark" />
-            <h2 className="font-display mt-3 text-lg font-bold text-ink">Belum Ada Akun Pengguna</h2>
+            <h2 className="font-display mt-3 text-lg font-bold text-ink">Menyiapkan Akun...</h2>
             <p className="mt-1 text-sm text-ink-soft">
-              Kamu perlu membuat atau memilih akun Siswa / Guru BK di Portal Admin sebelum dapat membagikan cerita.
+              Sedang menghubungkan ke akun perangkat Anda.
             </p>
-            <Link
-              to="/admin"
-              className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-forest px-4 py-2.5 text-xs font-bold text-paper-warm shadow-sm transition hover:bg-forest-dark"
-            >
-              <Shield className="h-4 w-4" />
-              <span>Buka Portal Admin</span>
-            </Link>
           </div>
         </div>
       </div>

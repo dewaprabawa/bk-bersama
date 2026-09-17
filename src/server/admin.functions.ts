@@ -58,3 +58,51 @@ export const deleteMember = createServerFn({ method: 'POST' })
     await db.delete(users).where(eq(users.id, data.userId))
     return { success: true }
   })
+
+export const getOrCreateDeviceAccount = createServerFn({ method: 'POST' })
+  .inputValidator(
+    (data: { deviceUserId?: string; initialRole?: 'siswa' | 'guru_bk'; initialName?: string }) => data,
+  )
+  .handler(async ({ data }) => {
+    // 1. If deviceUserId was provided, check if that user already exists in DB
+    if (data.deviceUserId && data.deviceUserId.trim()) {
+      const existing = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, data.deviceUserId.trim()))
+        .limit(1)
+
+      if (existing.length > 0) {
+        return { user: existing[0], isNew: false }
+      }
+    }
+
+    // 2. Fresh visitor: create a unique single account for this device
+    const allUsers = await db.select({ id: users.id }).from(users).limit(1)
+    let role: string = data.initialRole || 'siswa'
+    let name = data.initialName?.trim() || `Siswa #${Math.floor(1000 + Math.random() * 9000)}`
+    let grade = 'Siswa'
+
+    if (allUsers.length === 0) {
+      name = 'Dewa Prabawa'
+      role = 'guru_bk'
+      grade = 'Guru Pembina BK'
+    }
+
+    const newId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const newUser = {
+      id: newId,
+      name,
+      role,
+      grade,
+      address: '',
+      phone: '',
+      bio: role === 'guru_bk' ? 'Guru BK pendamping siswa.' : 'Siswa BK Bersama.',
+      avatarUrl: null,
+      joinedAt: new Date(),
+    }
+
+    await db.insert(users).values(newUser)
+    return { user: newUser, isNew: true }
+  })
+

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { getUsersList, createMember } from '@/server/admin.functions'
+import { getUsersList, getOrCreateDeviceAccount } from '@/server/admin.functions'
 
 export type UserRole = 'siswa' | 'guru_bk'
 
@@ -10,6 +10,8 @@ export type SessionUser = {
   role: string
   phone?: string | null
   bio?: string | null
+  address?: string | null
+  avatarUrl?: string | null
 }
 
 // Fallback compatibility objects for any stale client cache
@@ -23,6 +25,7 @@ type SessionContextValue = {
   hasUsers: boolean
   switchUser: (id: string) => void
   refreshUsers: () => Promise<void>
+  updateActiveUser: (updates: Partial<SessionUser>) => void
   getOrCreateUser: (name?: string, role?: 'siswa' | 'guru_bk') => Promise<SessionUser>
 }
 
@@ -32,84 +35,96 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [usersList, setUsersList] = useState<SessionUser[]>([])
   const [activeUser, setActiveUser] = useState<SessionUser | null>(null)
 
-  const loadUsers = async () => {
+  const loadAccountAndUsers = async () => {
     try {
+      // 1. Get current device's permanent single account
+      let savedId: string | undefined = undefined
+      try {
+        savedId =
+          localStorage.getItem('bk_device_account_id') ||
+          localStorage.getItem('bk_active_user_id') ||
+          undefined
+      } catch {}
+
+      const res = await getOrCreateDeviceAccount({
+        data: { deviceUserId: savedId },
+      })
+
+      if (res.user) {
+        const sessionUser: SessionUser = {
+          id: res.user.id,
+          name: res.user.name,
+          grade: res.user.grade,
+          role: res.user.role,
+          phone: res.user.phone,
+          bio: res.user.bio,
+          address: res.user.address,
+          avatarUrl: res.user.avatarUrl,
+        }
+        setActiveUser(sessionUser)
+
+        try {
+          localStorage.setItem('bk_device_account_id', sessionUser.id)
+          localStorage.setItem('bk_active_user_id', sessionUser.id)
+        } catch {}
+      }
+
+      // 2. Load members list for counselor/admin directories
       const list = await getUsersList()
       setUsersList(list)
-
-      const savedId = localStorage.getItem('bk_active_user_id')
-      if (savedId) {
-        const found = list.find((u) => u.id === savedId)
-        if (found) {
-          setActiveUser(found)
-          return
-        }
-      }
-
-      if (list.length > 0) {
-        setActiveUser(list[0])
-        localStorage.setItem('bk_active_user_id', list[0].id)
-      } else {
-        setActiveUser(null)
-      }
     } catch (err) {
-      console.error('Failed to load session users:', err)
+      console.error('Failed to initialize session:', err)
     }
   }
 
   useEffect(() => {
-    loadUsers()
+    loadAccountAndUsers()
   }, [])
 
-  const switchUser = (id: string) => {
-    const found = usersList.find((u) => u.id === id)
-    if (found) {
-      setActiveUser(found)
-      try {
-        localStorage.setItem('bk_active_user_id', found.id)
-      } catch {
-        // ignore
-      }
-    }
+  // Account switching is disabled per policy: 1 orang hanya boleh memiliki 1 akun
+  const switchUser = (_id: string) => {
+    console.warn('Pergantian akun tidak diizinkan: Setiap orang terikat pada 1 akun.')
+  }
+
+  const updateActiveUser = (updates: Partial<SessionUser>) => {
+    setActiveUser((prev) => (prev ? { ...prev, ...updates } : null))
   }
 
   const getOrCreateUser = async (
-    name?: string,
-    role: 'siswa' | 'guru_bk' = 'siswa',
+    _name?: string,
+    _role: 'siswa' | 'guru_bk' = 'siswa',
   ): Promise<SessionUser> => {
     if (activeUser) return activeUser
-    if (usersList.length > 0) {
-      setActiveUser(usersList[0])
-      try {
-        localStorage.setItem('bk_active_user_id', usersList[0].id)
-      } catch {}
-      return usersList[0]
-    }
 
-    const newUser = await createMember({
-      data: {
-        name: name?.trim() || 'Siswa',
-        role,
-        grade: role === 'guru_bk' ? 'Guru BK' : 'Siswa',
-        phone: '',
-        bio: '',
-      },
+    let savedId: string | undefined = undefined
+    try {
+      savedId =
+        localStorage.getItem('bk_device_account_id') ||
+        localStorage.getItem('bk_active_user_id') ||
+        undefined
+    } catch {}
+
+    const res = await getOrCreateDeviceAccount({
+      data: { deviceUserId: savedId },
     })
 
     const sessionUser: SessionUser = {
-      id: newUser.id,
-      name: newUser.name,
-      grade: newUser.grade,
-      role: newUser.role,
-      phone: newUser.phone,
-      bio: newUser.bio,
+      id: res.user.id,
+      name: res.user.name,
+      grade: res.user.grade,
+      role: res.user.role,
+      phone: res.user.phone,
+      bio: res.user.bio,
+      address: res.user.address,
+      avatarUrl: res.user.avatarUrl,
     }
 
     setActiveUser(sessionUser)
-    setUsersList([sessionUser])
     try {
+      localStorage.setItem('bk_device_account_id', sessionUser.id)
       localStorage.setItem('bk_active_user_id', sessionUser.id)
     } catch {}
+
     return sessionUser
   }
 
@@ -119,9 +134,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         activeUser,
         usersList,
         isWatcher: activeUser?.role === 'guru_bk',
-        hasUsers: usersList.length > 0,
+        hasUsers: Boolean(activeUser),
         switchUser,
-        refreshUsers: loadUsers,
+        refreshUsers: loadAccountAndUsers,
+        updateActiveUser,
         getOrCreateUser,
       }}
     >
@@ -140,6 +156,7 @@ export function useSession() {
       hasUsers: false,
       switchUser: () => {},
       refreshUsers: async () => {},
+      updateActiveUser: () => {},
       getOrCreateUser: async () => STUDENT_USER,
     }
   }

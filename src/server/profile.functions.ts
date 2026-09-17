@@ -17,12 +17,6 @@ export const getProfile = createServerFn({ method: 'GET' })
       user = userList[0] || null
     }
 
-    // Fallback to first user in database if target not found
-    if (!user) {
-      const allUsers = await db.select().from(users).limit(1)
-      user = allUsers[0] || null
-    }
-
     if (!user) {
       return {
         user: null,

@@ -1,6 +1,6 @@
-import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
+import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
-import { Camera, Check, ShieldCheck, UserCheck, UserPlus, Shield } from 'lucide-react'
+import { Camera, Check, ShieldCheck, UserPlus } from 'lucide-react'
 
 import { AppTopBar } from '@/components/app-top-bar'
 import { useSession } from '@/lib/session'
@@ -16,7 +16,7 @@ export const Route = createFileRoute('/_app/profile')({
 function ProfilePage() {
   const initialData = Route.useLoaderData()
   const router = useRouter()
-  const { activeUser, usersList, isWatcher, switchUser } = useSession()
+  const { activeUser, isWatcher, updateActiveUser } = useSession()
 
   const [profileData, setProfileData] = useState(initialData)
   const [name, setName] = useState(initialData?.user?.name || '')
@@ -67,6 +67,7 @@ function ProfilePage() {
           avatarUrl: photo,
         },
       })
+      updateActiveUser({ name, grade, address, phone, bio })
       setSaved(true)
       await router.invalidate()
       setTimeout(() => setSaved(false), 2200)
@@ -82,17 +83,10 @@ function ProfilePage() {
         <div className="px-4 py-8">
           <div className="rounded-2xl border border-dashed border-[#d8c7a3] bg-paper-warm/80 p-6 text-center">
             <UserPlus className="mx-auto h-10 w-10 text-forest-dark" />
-            <h2 className="font-display mt-3 text-lg font-bold text-ink">Belum Ada Akun Aktif</h2>
+            <h2 className="font-display mt-3 text-lg font-bold text-ink">Memuat Profil...</h2>
             <p className="mt-1 text-sm text-ink-soft">
-              Silakan buat akun Siswa atau Guru BK terlebih dahulu melalui Portal Admin.
+              Sedang menyiapkan akun tunggal perangkat Anda.
             </p>
-            <Link
-              to="/admin"
-              className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-forest px-4 py-2.5 text-xs font-bold text-paper-warm shadow-sm transition hover:bg-forest-dark"
-            >
-              <Shield className="h-4 w-4" />
-              <span>Buka Portal Admin</span>
-            </Link>
           </div>
         </div>
       </div>
@@ -103,36 +97,21 @@ function ProfilePage() {
     <div>
       <AppTopBar title="Profil Saya" subtitle="Data untuk guru BK dan komunitas" />
 
-      {/* Account Switcher if multiple users exist */}
-      {usersList.length > 1 && (
-        <div className="mx-4 mt-3 rounded-2xl border border-[#e4d7bd] bg-paper-warm p-3">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-ink-soft/70">
-            Ganti Akun Aktif
-          </p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {usersList.map((u) => {
-              const isSelected = u.id === activeUser.id
-              const isGuru = u.role === 'guru_bk'
-              return (
-                <button
-                  key={u.id}
-                  onClick={() => switchUser(u.id)}
-                  className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
-                    isSelected
-                      ? isGuru
-                        ? 'bg-rose text-white shadow-xs'
-                        : 'bg-forest text-paper-warm shadow-xs'
-                      : 'border border-[#e4d7bd] bg-paper text-ink-soft hover:bg-[#efe4cd]'
-                  }`}
-                >
-                  {isGuru ? <ShieldCheck className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
-                  <span>{u.name}</span>
-                </button>
-              )
-            })}
+      {/* Permanent Single Account Badge */}
+      <div className="mx-4 mt-3 flex items-center justify-between rounded-2xl border border-[#e4d7bd] bg-paper-warm p-3">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-forest/15 text-forest-dark">
+            <ShieldCheck className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-[11.5px] font-bold text-ink">Akun Permanen Perangkat</p>
+            <p className="text-[10.5px] text-ink-soft">1 Orang · 1 Akun (Tidak dapat berganti akun)</p>
           </div>
         </div>
-      )}
+        <span className="rounded-full bg-forest/10 px-2.5 py-1 text-[10px] font-bold text-forest-dark">
+          Terkunci
+        </span>
+      </div>
 
       <div className="flex flex-col items-center px-4 pt-4">
         <label className="relative flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-forest text-2xl font-bold text-paper-warm shadow-xs">

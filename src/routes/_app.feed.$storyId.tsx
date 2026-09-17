@@ -36,8 +36,6 @@ function StoryDetailPage() {
   const [likesCount, setLikesCount] = useState(story.likes)
   const [commentsList, setCommentsList] = useState<Comment[]>(story.comments)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [customAuthorName, setCustomAuthorName] = useState('')
-  const [showNameEdit, setShowNameEdit] = useState(false)
 
   // Re-sync with loader data
   useEffect(() => {
@@ -92,8 +90,8 @@ function StoryDetailPage() {
 
     setIsSubmitting(true)
     try {
-      const user = await getOrCreateUser(customAuthorName)
-      const authorName = customAuthorName.trim() || user.name
+      const user = await getOrCreateUser()
+      const authorName = user.name || 'Siswa'
 
       // Optimistic comment
       const tempId = `temp-${Date.now()}`
@@ -330,32 +328,10 @@ function StoryDetailPage() {
             <span className="flex items-center gap-1">
               <User className="h-3 w-3 text-forest" />
               <span>
-                Nama Pengirim:{' '}
-                <strong className="text-ink">
-                  {customAuthorName || activeUser?.name || 'Siswa'}
-                </strong>
+                Komentar sebagai: <strong className="text-ink">{activeUser?.name || 'Siswa'}</strong>
               </span>
             </span>
-            <button
-              type="button"
-              onClick={() => setShowNameEdit((v) => !v)}
-              className="text-[11px] font-semibold text-forest underline hover:text-forest-dark"
-            >
-              {showNameEdit ? 'Tutup' : 'Ubah Nama'}
-            </button>
           </div>
-
-          {showNameEdit && (
-            <div className="mb-2.5">
-              <input
-                type="text"
-                value={customAuthorName}
-                onChange={(e) => setCustomAuthorName(e.target.value)}
-                placeholder="Tulis nama komentarmu (misal: Rian, Anonim, atau Siswa Kelas XI)"
-                className="w-full rounded-xl border border-[#e4d7bd] bg-paper px-3 py-1.5 text-xs text-ink outline-none focus:border-forest"
-              />
-            </div>
-          )}
 
           <div className="flex items-center gap-2">
             <input

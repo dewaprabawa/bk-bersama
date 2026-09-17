@@ -28,7 +28,7 @@ function AdminPage() {
   const { users } = Route.useLoaderData()
   const router = useRouter()
   const navigate = useNavigate()
-  const { activeUser, switchUser, refreshUsers } = useSession()
+  const { activeUser, isWatcher, refreshUsers } = useSession()
 
   // Form state
   const [name, setName] = useState('')
@@ -74,11 +74,6 @@ function AdminPage() {
 
       await refreshUsers()
       await router.invalidate()
-
-      // Auto switch if this is the first user
-      if (!activeUser) {
-        switchUser(newUser.id)
-      }
 
       setTimeout(() => setSuccessMsg(''), 4000)
     } catch (err: any) {
@@ -172,124 +167,149 @@ function AdminPage() {
           </div>
         </div>
 
-        {/* Form Tambah Anggota */}
-        <div className="rounded-2xl border border-[#e4d7bd] bg-paper-warm p-4 shadow-2xs">
-          <div className="flex items-center gap-2 border-b border-[#e4d7bd]/60 pb-3">
-            <UserPlus className="h-4.5 w-4.5 text-terracotta" />
-            <h3 className="font-display text-[15px] font-bold text-ink">Daftarkan Anggota Baru</h3>
+        {/* Form Tambah Anggota (Khusus Guru BK) atau Info Status Akun (Siswa) */}
+        {!isWatcher ? (
+          <div className="rounded-2xl border border-[#e4d7bd] bg-paper-warm p-4 shadow-2xs">
+            <div className="flex items-center gap-2 border-b border-[#e4d7bd]/60 pb-3">
+              <Shield className="h-4.5 w-4.5 text-forest-dark" />
+              <h3 className="font-display text-[15px] font-bold text-ink">Status Akun Perangkat Anda</h3>
+            </div>
+            <div className="mt-3 rounded-xl bg-paper p-3.5 text-xs leading-relaxed text-ink-soft">
+              <p className="font-semibold text-ink">
+                Kebijakan Sistem: 1 orang hanya memiliki 1 akun dan tidak dapat berganti akun.
+              </p>
+              <div className="mt-2.5 flex items-center justify-between rounded-lg bg-paper-warm px-3 py-2">
+                <span>Nama Pengguna:</span>
+                <strong className="text-ink">{activeUser?.name}</strong>
+              </div>
+              <div className="mt-1 flex items-center justify-between rounded-lg bg-paper-warm px-3 py-2">
+                <span>Peran / Status:</span>
+                <strong className="text-forest-dark">{activeUser?.role === 'guru_bk' ? 'Guru BK' : 'Siswa'} ({activeUser?.grade})</strong>
+              </div>
+              <p className="mt-3 text-[11px] text-ink-soft/70">
+                *Pendaftaran dan penambahan data anggota sekolah hanya dapat dilakukan oleh akun Guru BK / Watcher.
+              </p>
+            </div>
           </div>
-
-          <form onSubmit={handleCreateMember} className="mt-3.5 space-y-3.5">
-            {errorMsg && (
-              <div className="flex items-center gap-2 rounded-xl bg-rose/15 p-2.5 text-xs font-medium text-rose">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>{errorMsg}</span>
-              </div>
-            )}
-
-            {successMsg && (
-              <div className="flex items-center gap-2 rounded-xl bg-emerald-500/15 p-2.5 text-xs font-medium text-emerald-800">
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
-                <span>{successMsg}</span>
-              </div>
-            )}
-
-            <div>
-              <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-ink-soft">
-                Peran Pengguna
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setRole('siswa')}
-                  className={`flex items-center justify-center gap-2 rounded-xl border p-2.5 text-xs font-bold transition ${
-                    role === 'siswa'
-                      ? 'border-forest bg-forest text-paper-warm shadow-xs'
-                      : 'border-[#e4d7bd] bg-paper text-ink-soft hover:bg-[#efe4cd]'
-                  }`}
-                >
-                  <UserCheck className="h-4 w-4" />
-                  <span>Siswa</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRole('guru_bk')}
-                  className={`flex items-center justify-center gap-2 rounded-xl border p-2.5 text-xs font-bold transition ${
-                    role === 'guru_bk'
-                      ? 'border-rose bg-rose text-white shadow-xs'
-                      : 'border-[#e4d7bd] bg-paper text-ink-soft hover:bg-[#efe4cd]'
-                  }`}
-                >
-                  <Shield className="h-4 w-4" />
-                  <span>Guru BK / Satgas</span>
-                </button>
-              </div>
+        ) : (
+          <div className="rounded-2xl border border-[#e4d7bd] bg-paper-warm p-4 shadow-2xs">
+            <div className="flex items-center gap-2 border-b border-[#e4d7bd]/60 pb-3">
+              <UserPlus className="h-4.5 w-4.5 text-terracotta" />
+              <h3 className="font-display text-[15px] font-bold text-ink">Daftarkan Anggota Baru (Guru BK)</h3>
             </div>
 
-            <div>
-              <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-ink-soft">
-                Nama Lengkap *
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={role === 'guru_bk' ? 'Contoh: Ibu Rina Melati, S.Pd' : 'Contoh: Arya Bagus'}
-                className="w-full rounded-xl border border-[#e4d7bd] bg-paper px-3 py-2 text-sm text-ink placeholder:text-ink-soft/50 focus:border-forest focus:outline-none"
-              />
-            </div>
+            <form onSubmit={handleCreateMember} className="mt-3.5 space-y-3.5">
+              {errorMsg && (
+                <div className="flex items-center gap-2 rounded-xl bg-rose/15 p-2.5 text-xs font-medium text-rose">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{errorMsg}</span>
+                </div>
+              )}
 
-            <div>
-              <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-ink-soft">
-                {role === 'guru_bk' ? 'Jabatan / Tim *' : 'Kelas / Tingkat *'}
-              </label>
-              <input
-                type="text"
-                value={grade}
-                onChange={(e) => setGrade(e.target.value)}
-                placeholder={role === 'guru_bk' ? 'Contoh: Guru BK & Satgas Anti-Perundungan' : 'Contoh: Kelas XI IPS 1'}
-                className="w-full rounded-xl border border-[#e4d7bd] bg-paper px-3 py-2 text-sm text-ink placeholder:text-ink-soft/50 focus:border-forest focus:outline-none"
-              />
-            </div>
+              {successMsg && (
+                <div className="flex items-center gap-2 rounded-xl bg-emerald-500/15 p-2.5 text-xs font-medium text-emerald-800">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <span>{successMsg}</span>
+                </div>
+              )}
 
-            <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-ink-soft">
-                  Nomor HP (Opsional)
+                  Peran Pengguna
                 </label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="08123456789"
-                  className="w-full rounded-xl border border-[#e4d7bd] bg-paper px-3 py-2 text-sm text-ink placeholder:text-ink-soft/50 focus:border-forest focus:outline-none"
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRole('siswa')}
+                    className={`flex items-center justify-center gap-2 rounded-xl border p-2.5 text-xs font-bold transition ${
+                      role === 'siswa'
+                        ? 'border-forest bg-forest text-paper-warm shadow-xs'
+                        : 'border-[#e4d7bd] bg-paper text-ink-soft hover:bg-[#efe4cd]'
+                    }`}
+                  >
+                    <UserCheck className="h-4 w-4" />
+                    <span>Siswa</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRole('guru_bk')}
+                    className={`flex items-center justify-center gap-2 rounded-xl border p-2.5 text-xs font-bold transition ${
+                      role === 'guru_bk'
+                        ? 'border-rose bg-rose text-white shadow-xs'
+                        : 'border-[#e4d7bd] bg-paper text-ink-soft hover:bg-[#efe4cd]'
+                    }`}
+                  >
+                    <Shield className="h-4 w-4" />
+                    <span>Guru BK / Satgas</span>
+                  </button>
+                </div>
               </div>
 
               <div>
                 <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-ink-soft">
-                  Catatan Singkat (Bio)
+                  Nama Lengkap *
                 </label>
                 <input
                   type="text"
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  placeholder="Siswa atau konselor..."
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={role === 'guru_bk' ? 'Contoh: Ibu Rina Melati, S.Pd' : 'Contoh: Arya Bagus'}
                   className="w-full rounded-xl border border-[#e4d7bd] bg-paper px-3 py-2 text-sm text-ink placeholder:text-ink-soft/50 focus:border-forest focus:outline-none"
                 />
               </div>
-            </div>
 
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-forest py-2.5 text-sm font-bold text-paper-warm shadow-[0_3px_0_var(--color-forest-dark)] transition active:translate-y-[2px] active:shadow-none disabled:opacity-60"
-            >
-              <UserPlus className="h-4 w-4" />
-              <span>{isSubmitting ? 'Mendaftarkan...' : 'Daftarkan Anggota'}</span>
-            </button>
-          </form>
-        </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-ink-soft">
+                  {role === 'guru_bk' ? 'Jabatan / Tim *' : 'Kelas / Tingkat *'}
+                </label>
+                <input
+                  type="text"
+                  value={grade}
+                  onChange={(e) => setGrade(e.target.value)}
+                  placeholder={role === 'guru_bk' ? 'Contoh: Guru BK & Satgas Anti-Perundungan' : 'Contoh: Kelas XI IPS 1'}
+                  className="w-full rounded-xl border border-[#e4d7bd] bg-paper px-3 py-2 text-sm text-ink placeholder:text-ink-soft/50 focus:border-forest focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-ink-soft">
+                    Nomor HP (Opsional)
+                  </label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="08123456789"
+                    className="w-full rounded-xl border border-[#e4d7bd] bg-paper px-3 py-2 text-sm text-ink placeholder:text-ink-soft/50 focus:border-forest focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-ink-soft">
+                    Catatan Singkat (Bio)
+                  </label>
+                  <input
+                    type="text"
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    placeholder="Siswa atau konselor..."
+                    className="w-full rounded-xl border border-[#e4d7bd] bg-paper px-3 py-2 text-sm text-ink placeholder:text-ink-soft/50 focus:border-forest focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-forest py-2.5 text-sm font-bold text-paper-warm shadow-[0_3px_0_var(--color-forest-dark)] transition active:translate-y-[2px] active:shadow-none disabled:opacity-60"
+              >
+                <UserPlus className="h-4 w-4" />
+                <span>{isSubmitting ? 'Mendaftarkan...' : 'Daftarkan Anggota'}</span>
+              </button>
+            </form>
+          </div>
+        )}
 
         {/* Daftar Anggota Terdaftar */}
         <div>
@@ -363,27 +383,22 @@ function AdminPage() {
                       </div>
 
                       <div className="flex flex-col items-end gap-1.5 shrink-0">
-                        {isActive ? (
+                        {isActive && (
                           <span className="flex items-center gap-1 rounded-full bg-forest px-2.5 py-1 text-[10.5px] font-bold text-paper-warm">
                             <CheckCircle2 className="h-3 w-3" />
-                            Sedang Aktif
+                            Akun Anda
                           </span>
-                        ) : (
-                          <button
-                            onClick={() => switchUser(u.id)}
-                            className="rounded-full border border-forest/30 bg-paper px-2.5 py-1 text-[11px] font-semibold text-forest-dark transition hover:bg-forest hover:text-white"
-                          >
-                            Pilih Akun Ini
-                          </button>
                         )}
 
-                        <button
-                          onClick={() => handleDeleteMember(u.id, u.name)}
-                          className="flex items-center gap-1 text-[11px] font-medium text-rose/80 hover:text-rose hover:underline"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                          Hapus
-                        </button>
+                        {isWatcher && !isActive && (
+                          <button
+                            onClick={() => handleDeleteMember(u.id, u.name)}
+                            className="flex items-center gap-1 text-[11px] font-medium text-rose/80 hover:text-rose hover:underline"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            Hapus
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
